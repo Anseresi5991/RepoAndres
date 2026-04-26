@@ -1,0 +1,204 @@
+//@version=5
+indicator("SAR Riesgo Medio-Alto", overlay=true)
+
+// ─── PARABOLIC SAR ───────────────────────────────────────────────────────────
+grp_sar   = "Parabolic SAR"
+sar_start = input.float(0.02, "Start",      minval=0.001, step=0.001, group=grp_sar)
+sar_inc   = input.float(0.02, "Increment",  minval=0.001, step=0.001, group=grp_sar)
+sar_max   = input.float(0.2,  "Max",        minval=0.01,  step=0.01,  group=grp_sar)
+
+// ─── ESTRUCTURA HH/HL ────────────────────────────────────────────────────────
+grp_trend = "Estructura (HH/HL)"
+pivot_lr  = input.int(2, "Barras izq/der pivote", minval=1, maxval=5, group=grp_trend)
+
+// ─── TP / SL ─────────────────────────────────────────────────────────────────
+grp_tpsl        = "TP / SL"
+tp_pct          = input.float(0.8,    "TP (%)",           minval=0.01, step=0.01,  group=grp_tpsl)
+sl_pct          = input.float(0.5,    "SL (%)",           minval=0.01, step=0.01,  group=grp_tpsl)
+fee_tp_pct      = input.float(0.05,   "Fee TP (%)",       minval=0.0,  step=0.01,  group=grp_tpsl)
+fee_sl_pct      = input.float(0.10,   "Fee SL (%)",       minval=0.0,  step=0.01,  group=grp_tpsl)
+leverage        = input.float(10.0,   "Apalancamiento",   minval=1.0,  step=1.0,   group=grp_tpsl)
+initial_capital = input.float(1000.0, "Capital inicial",  minval=1.0,              group=grp_tpsl)
+
+// ─── FILTROS ─────────────────────────────────────────────────────────────────
+grp_filter       = "Filtros"
+use_trend_filter = input.bool(true,  "Filtro de estructura HH/HL", group=grp_filter)
+skip_sundays     = input.bool(true,  "Excluir domingos",            group=grp_filter)
+
+// =============================================================================
+// SAR
+// =============================================================================
+sar_val     = ta.sar(sar_start, sar_inc, sar_max)
+sar_bullish = sar_val < close
+long_cross  = sar_bullish and not sar_bullish[1]   // SAR flipa de arriba → abajo (alcista)
+short_cross = not sar_bullish and sar_bullish[1]   // SAR flipa de abajo → arriba (bajista)
+
+// =============================================================================
+// ESTRUCTURA POR PIVOTES (HH/HL — igual que TrendAnalyzer C# con leftRight=2)
+// =============================================================================
+ph = ta.pivothigh(high, pivot_lr, pivot_lr)
+pl = ta.pivotlow(low,  pivot_lr, pivot_lr)
+
+var float last_ph = na
+var float prev_ph = na
+var float last_pl = na
+var float prev_pl = na
+
+if not na(ph)
+    prev_ph := last_ph
+    last_ph := ph
+
+if not na(pl)
+    prev_pl := last_pl
+    last_pl := pl
+
+has_two_pivots = not na(last_ph) and not na(prev_ph) and not na(last_pl) and not na(prev_pl)
+is_bullish_str = has_two_pivots and last_ph > prev_ph and last_pl > prev_pl  // HH + HL
+is_bearish_str = has_two_pivots and last_ph < prev_ph and last_pl < prev_pl  // LH + LL
+
+// =============================================================================
+// SEÑALES FINALES
+// =============================================================================
+is_sunday = dayofweek == dayofweek.sunday
+
+long_ok  = long_cross  and (not use_trend_filter or is_bullish_str) and (not skip_sundays or not is_sunday)
+short_ok = short_cross and (not use_trend_filter or is_bearish_str) and (not skip_sundays or not is_sunday)
+
+// =============================================================================
+// ESTADO DEL TRADE (uno a la vez)
+// =============================================================================
+var float entry_price = na
+var float tp_price    = na
+var float sl_price    = na
+var bool  in_trade    = false
+var bool  is_long_t   = false
+var float eff_tp      = 0.0
+var float eff_sl      = 0.0
+
+// Bloquea TP/SL en la misma vela de apertura (entrada al cierre)
+any_opened = long_ok or short_ok
+tp_hit = in_trade and not any_opened and (is_long_t ? high >= tp_price : low  <= tp_price)
+sl_hit = in_trade and not any_opened and (is_long_t ? low  <= sl_price : high >= sl_price)
+
+// Cerrar trade
+if tp_hit or sl_hit
+    in_trade    := false
+    entry_price := na
+    tp_price    := na
+    sl_price    := na
+
+// Abrir nuevo trade
+if any_opened and not in_trade
+    is_long_t   := long_ok
+    entry_price := close
+    tp_price    := is_long_t ? close * (1 + tp_pct/100) : close * (1 - tp_pct/100)
+    sl_price    := is_long_t ? close * (1 - sl_pct/100) : close * (1 + sl_pct/100)
+    eff_tp      := math.max(tp_pct - fee_tp_pct, 0) * leverage
+    eff_sl      := (sl_pct + fee_sl_pct) * leverage
+    in_trade    := true
+
+// =============================================================================
+// ESTADÍSTICAS
+// =============================================================================
+var int   total_tp     = 0
+var int   total_sl     = 0
+var int   total_closed = 0
+var float profit_pct   = 0.0
+var float loss_pct     = 0.0
+var float net_pct      = 0.0
+var float eq_pct       = 0.0
+var float eq_peak      = 0.0
+var float max_dd       = 0.0
+var float compound     = na
+
+if barstate.isfirst
+    compound := initial_capital
+
+if tp_hit
+    total_tp     += 1
+    total_closed += 1
+    profit_pct   += eff_tp
+    net_pct      := profit_pct - loss_pct
+    eq_pct       += eff_tp
+    eq_peak      := math.max(eq_peak, eq_pct)
+    max_dd       := math.max(max_dd, eq_peak - eq_pct)
+    compound     := compound * (1 + eff_tp/100)
+
+else if sl_hit
+    total_sl     += 1
+    total_closed += 1
+    loss_pct     += eff_sl
+    net_pct      := profit_pct - loss_pct
+    eq_pct       -= eff_sl
+    eq_peak      := math.max(eq_peak, eq_pct)
+    max_dd       := math.max(max_dd, eq_peak - eq_pct)
+    compound     := compound * (1 - eff_sl/100)
+
+win_rate = total_closed > 0 ? (total_tp / total_closed) * 100 : 0.0
+
+// =============================================================================
+// VISUALES
+// =============================================================================
+plot(sar_val, "SAR", color=sar_bullish ? color.green : color.red, style=plot.style_circles, linewidth=1)
+
+// Pivotes
+plotshape(ph, "PH", style=shape.triangledown, location=location.abovebar, color=color.new(color.red,   40), size=size.tiny, offset=-pivot_lr)
+plotshape(pl, "PL", style=shape.triangleup,   location=location.belowbar, color=color.new(color.green, 40), size=size.tiny, offset=-pivot_lr)
+
+// Señales
+plotshape(long_ok,  "Long",  style=shape.labelup,   location=location.belowbar, color=color.green, textcolor=color.white, size=size.small, text="L")
+plotshape(short_ok, "Short", style=shape.labeldown, location=location.abovebar, color=color.red,   textcolor=color.white, size=size.small, text="S")
+
+// Trade lines
+plot(in_trade and not na(entry_price) ? entry_price : na, "Entrada", color=color.yellow, linewidth=1, style=plot.style_linebr)
+plot(in_trade and not na(tp_price)    ? tp_price    : na, "TP",      color=color.lime,   linewidth=2, style=plot.style_linebr)
+plot(in_trade and not na(sl_price)    ? sl_price    : na, "SL",      color=color.red,    linewidth=2, style=plot.style_linebr)
+
+plotshape(tp_hit, "TP ✅", style=shape.labelup,   location=location.belowbar, color=color.lime, textcolor=color.black, size=size.tiny, text="TP")
+plotshape(sl_hit, "SL ❌", style=shape.labeldown, location=location.abovebar, color=color.red,  textcolor=color.white, size=size.tiny, text="SL")
+
+// =============================================================================
+// TABLA
+// =============================================================================
+var table stats = table.new(position.top_right, 2, 9, bgcolor=color.new(color.black, 60))
+
+if barstate.islast
+    net_col  = net_pct >= 0 ? color.green : color.red
+    dd_col   = max_dd  >  0 ? color.orange : color.gray
+    str_text = is_bullish_str ? "ALCISTA 🟢" : is_bearish_str ? "BAJISTA 🔴" : "LATERAL ⚪"
+    str_col  = is_bullish_str ? color.green  : is_bearish_str ? color.red    : color.gray
+
+    table.cell(stats, 0, 0, "SAR",         text_color=color.white, text_size=size.small)
+    table.cell(stats, 1, 0, sar_bullish ? "ALCISTA 🟢" : "BAJISTA 🔴", text_color=color.white, bgcolor=sar_bullish ? color.new(color.green,60) : color.new(color.red,60), text_size=size.small)
+
+    table.cell(stats, 0, 1, "Estructura",  text_color=color.white, text_size=size.small)
+    table.cell(stats, 1, 1, str_text,      text_color=color.white, bgcolor=str_col, text_size=size.small)
+
+    table.cell(stats, 0, 2, "TP / SL",    text_color=color.white, text_size=size.small)
+    table.cell(stats, 1, 2, str.tostring(total_tp) + " / " + str.tostring(total_sl), text_color=color.white, text_size=size.small)
+
+    table.cell(stats, 0, 3, "Win Rate",    text_color=color.white, text_size=size.small)
+    table.cell(stats, 1, 3, str.tostring(win_rate, "#.##") + "%", text_color=color.white, text_size=size.small)
+
+    table.cell(stats, 0, 4, "Neto x" + str.tostring(leverage, "#"), text_color=color.white, text_size=size.small)
+    table.cell(stats, 1, 4, str.tostring(net_pct, "#.##") + "%", text_color=color.white, bgcolor=net_col, text_size=size.small)
+
+    table.cell(stats, 0, 5, "Máx. Caída", text_color=color.white, text_size=size.small)
+    table.cell(stats, 1, 5, str.tostring(max_dd, "#.##") + "%", text_color=color.white, bgcolor=dd_col, text_size=size.small)
+
+    table.cell(stats, 0, 6, "Capital",     text_color=color.white, text_size=size.small)
+    table.cell(stats, 1, 6, "$" + str.tostring(compound, "#.##"), text_color=color.white, bgcolor=color.new(color.blue,70), text_size=size.small)
+
+    table.cell(stats, 0, 7, "TP ef.",      text_color=color.white, text_size=size.small)
+    table.cell(stats, 1, 7, str.tostring(tp_pct,"#.##") + "% → " + str.tostring(eff_tp,"#.##") + "%", text_color=color.white, text_size=size.small)
+
+    table.cell(stats, 0, 8, "SL ef.",      text_color=color.white, text_size=size.small)
+    table.cell(stats, 1, 8, str.tostring(sl_pct,"#.##") + "% → " + str.tostring(eff_sl,"#.##") + "%", text_color=color.white, text_size=size.small)
+
+// =============================================================================
+// ALERTAS JSON
+// =============================================================================
+if long_ok
+    alert('{"secret":"secreto","tipo":"SAR","lado":"long","tp":' + str.tostring(tp_pct) + ',"sl":' + str.tostring(sl_pct) + '}', alert.freq_once_per_bar_close)
+if short_ok
+    alert('{"secret":"secreto","tipo":"SAR","lado":"short","tp":' + str.tostring(tp_pct) + ',"sl":' + str.tostring(sl_pct) + '}', alert.freq_once_per_bar_close)

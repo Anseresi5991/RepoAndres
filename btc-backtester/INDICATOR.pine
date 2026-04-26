@@ -1,0 +1,953 @@
+//@version=5
+indicator("12 Combos BTC Rango Dinámico + Solo Resistencias", overlay=true)
+
+// --- 1. CONFIGURACIÓN DEL RANGO — COMBO 1 (principal) ---
+grp_params = "Combo 1 — Configuración del Rango"
+min_range_pct    = input.float(0.6,  "Tamaño Mínimo (%)", minval=0.1, step=0.1, tooltip="% mínimo de compresión del rango", group=grp_params)
+max_range_pct    = input.float(1.2,  "Tamaño Máximo (%)", minval=0.1, step=0.1, tooltip="% máximo de compresión del rango", group=grp_params)
+lookback_candles = input.int(20,     "Velas hacia atrás",  minval=1,   tooltip="Cuántas velas analizamos para definir el rango", group=grp_params)
+min_wick_pct     = input.float(15.0, "Mecha mínima (%)",  minval=0.1, step=0.1, tooltip="% mínimo de mecha superior respecto al rango de la vela", group=grp_params)
+sl_pct           = input.float(0.5,  "SL (%)",  minval=0.01, step=0.01, group=grp_params)
+tp_pct           = input.float(0.15, "TP (%)",  minval=0.01, step=0.01, group=grp_params)
+
+var float simple_capital = na
+
+// --- 2. COMBO 2 (opcional) ---
+grp_c2       = "Combo 2 (opcional)"
+use_combo2   = input.bool(false, "Activar Combo 2", group=grp_c2)
+min_range2   = input.float(0.6,  "Mínimo (%)",      minval=0.1, step=0.1,  group=grp_c2)
+max_range2   = input.float(1.2,  "Máximo (%)",      minval=0.1, step=0.1,  group=grp_c2)
+lookback2    = input.int(20,     "Velas lookback",  minval=1,               group=grp_c2)
+min_wick2    = input.float(15.0, "Mecha mínima (%)",minval=0.1, step=0.1,  group=grp_c2)
+sl_pct2      = input.float(0.5,  "SL (%)",          minval=0.01, step=0.01, group=grp_c2)
+tp_pct2      = input.float(0.15, "TP (%)",          minval=0.01, step=0.01, group=grp_c2)
+
+// --- 3. COMBO 3 (opcional) ---
+grp_c3       = "Combo 3 (opcional)"
+use_combo3   = input.bool(false, "Activar Combo 3", group=grp_c3)
+min_range3   = input.float(0.6,  "Mínimo (%)",      minval=0.1, step=0.1,  group=grp_c3)
+max_range3   = input.float(1.2,  "Máximo (%)",      minval=0.1, step=0.1,  group=grp_c3)
+lookback3    = input.int(20,     "Velas lookback",  minval=1,               group=grp_c3)
+min_wick3    = input.float(15.0, "Mecha mínima (%)",minval=0.1, step=0.1,  group=grp_c3)
+sl_pct3      = input.float(0.5,  "SL (%)",          minval=0.01, step=0.01, group=grp_c3)
+tp_pct3      = input.float(0.15, "TP (%)",          minval=0.01, step=0.01, group=grp_c3)
+
+// --- 4. COMBO 4 (opcional) ---
+grp_c4       = "Combo 4 (opcional)"
+use_combo4   = input.bool(false, "Activar Combo 4", group=grp_c4)
+min_range4   = input.float(0.6,  "Mínimo (%)",      minval=0.1, step=0.1,  group=grp_c4)
+max_range4   = input.float(1.2,  "Máximo (%)",      minval=0.1, step=0.1,  group=grp_c4)
+lookback4    = input.int(20,     "Velas lookback",  minval=1,               group=grp_c4)
+min_wick4    = input.float(15.0, "Mecha mínima (%)",minval=0.1, step=0.1,  group=grp_c4)
+sl_pct4      = input.float(0.5,  "SL (%)",          minval=0.01, step=0.01, group=grp_c4)
+tp_pct4      = input.float(0.15, "TP (%)",          minval=0.01, step=0.01, group=grp_c4)
+
+// --- 5. COMBO 5 (opcional) ---
+grp_c5       = "Combo 5 (opcional)"
+use_combo5   = input.bool(false, "Activar Combo 5", group=grp_c5)
+min_range5   = input.float(0.6,  "Mínimo (%)",      minval=0.1, step=0.1,  group=grp_c5)
+max_range5   = input.float(1.2,  "Máximo (%)",      minval=0.1, step=0.1,  group=grp_c5)
+lookback5    = input.int(20,     "Velas lookback",  minval=1,               group=grp_c5)
+min_wick5    = input.float(15.0, "Mecha mínima (%)",minval=0.1, step=0.1,  group=grp_c5)
+sl_pct5      = input.float(0.5,  "SL (%)",          minval=0.01, step=0.01, group=grp_c5)
+tp_pct5      = input.float(0.15, "TP (%)",          minval=0.01, step=0.01, group=grp_c5)
+
+// --- 6. COMBO 6 (opcional) ---
+grp_c6       = "Combo 6 (opcional)"
+use_combo6   = input.bool(false, "Activar Combo 6", group=grp_c6)
+min_range6   = input.float(0.6,  "Mínimo (%)",      minval=0.1, step=0.1,  group=grp_c6)
+max_range6   = input.float(1.2,  "Máximo (%)",      minval=0.1, step=0.1,  group=grp_c6)
+lookback6    = input.int(20,     "Velas lookback",  minval=1,               group=grp_c6)
+min_wick6    = input.float(15.0, "Mecha mínima (%)",minval=0.1, step=0.1,  group=grp_c6)
+sl_pct6      = input.float(0.5,  "SL (%)",          minval=0.01, step=0.01, group=grp_c6)
+tp_pct6      = input.float(0.15, "TP (%)",          minval=0.01, step=0.01, group=grp_c6)
+
+// --- 7. COMBO 7 (opcional) ---
+grp_c7       = "Combo 7 (opcional)"
+use_combo7   = input.bool(false, "Activar Combo 7", group=grp_c7)
+min_range7   = input.float(0.6,  "Mínimo (%)",      minval=0.1, step=0.1,  group=grp_c7)
+max_range7   = input.float(1.2,  "Máximo (%)",      minval=0.1, step=0.1,  group=grp_c7)
+lookback7    = input.int(20,     "Velas lookback",  minval=1,               group=grp_c7)
+min_wick7    = input.float(15.0, "Mecha mínima (%)",minval=0.1, step=0.1,  group=grp_c7)
+sl_pct7      = input.float(0.5,  "SL (%)",          minval=0.01, step=0.01, group=grp_c7)
+tp_pct7      = input.float(0.15, "TP (%)",          minval=0.01, step=0.01, group=grp_c7)
+
+
+
+// --- 8. COMBO 8 (opcional) ---
+grp_c8       = "Combo 8 (opcional)"
+use_combo8   = input.bool(false, "Activar Combo 8", group=grp_c8)
+min_range8   = input.float(0.6,  "Mínimo (%)",      minval=0.1, step=0.1,  group=grp_c8)
+max_range8   = input.float(1.2,  "Máximo (%)",      minval=0.1, step=0.1,  group=grp_c8)
+lookback8    = input.int(20,     "Velas lookback",  minval=1,               group=grp_c8)
+min_wick8    = input.float(15.0, "Mecha mínima (%)",minval=0.1, step=0.1,  group=grp_c8)
+sl_pct8      = input.float(0.5,  "SL (%)",          minval=0.01, step=0.01, group=grp_c8)
+tp_pct8      = input.float(0.15, "TP (%)",          minval=0.01, step=0.01, group=grp_c8)
+
+// --- 9. COMBO 9 (opcional) ---
+grp_c9       = "Combo 9 (opcional)"
+use_combo9   = input.bool(false, "Activar Combo 9", group=grp_c9)
+min_range9   = input.float(0.6,  "Mínimo (%)",      minval=0.1, step=0.1,  group=grp_c9)
+max_range9   = input.float(1.2,  "Máximo (%)",      minval=0.1, step=0.1,  group=grp_c9)
+lookback9    = input.int(20,     "Velas lookback",  minval=1,               group=grp_c9)
+min_wick9    = input.float(15.0, "Mecha mínima (%)",minval=0.1, step=0.1,  group=grp_c9)
+sl_pct9      = input.float(0.5,  "SL (%)",          minval=0.01, step=0.01, group=grp_c9)
+tp_pct9      = input.float(0.15, "TP (%)",          minval=0.01, step=0.01, group=grp_c9)
+
+// --- 10. COMBO 10 (opcional) ---
+grp_c10      = "Combo 10 (opcional)"
+use_combo10  = input.bool(false, "Activar Combo 10", group=grp_c10)
+min_range10  = input.float(0.6,  "Mínimo (%)",       minval=0.1, step=0.1,  group=grp_c10)
+max_range10  = input.float(1.2,  "Máximo (%)",       minval=0.1, step=0.1,  group=grp_c10)
+lookback10   = input.int(20,     "Velas lookback",   minval=1,               group=grp_c10)
+min_wick10   = input.float(15.0, "Mecha mínima (%)", minval=0.1, step=0.1,  group=grp_c10)
+sl_pct10     = input.float(0.5,  "SL (%)",           minval=0.01, step=0.01, group=grp_c10)
+tp_pct10     = input.float(0.15, "TP (%)",           minval=0.01, step=0.01, group=grp_c10)
+
+// --- 11. COMBO 11 (opcional) ---
+grp_c11      = "Combo 11 (opcional)"
+use_combo11  = input.bool(false, "Activar Combo 11", group=grp_c11)
+min_range11  = input.float(0.6,  "Mínimo (%)",       minval=0.1, step=0.1,  group=grp_c11)
+max_range11  = input.float(1.2,  "Máximo (%)",       minval=0.1, step=0.1,  group=grp_c11)
+lookback11   = input.int(20,     "Velas lookback",   minval=1,               group=grp_c11)
+min_wick11   = input.float(15.0, "Mecha mínima (%)", minval=0.1, step=0.1,  group=grp_c11)
+sl_pct11     = input.float(0.5,  "SL (%)",           minval=0.01, step=0.01, group=grp_c11)
+tp_pct11     = input.float(0.15, "TP (%)",           minval=0.01, step=0.01, group=grp_c11)
+
+// --- 12. COMBO 12 (opcional) ---
+grp_c12      = "Combo 12 (opcional)"
+use_combo12  = input.bool(false, "Activar Combo 12", group=grp_c12)
+min_range12  = input.float(0.6,  "Mínimo (%)",       minval=0.1, step=0.1,  group=grp_c12)
+max_range12  = input.float(1.2,  "Máximo (%)",       minval=0.1, step=0.1,  group=grp_c12)
+lookback12   = input.int(20,     "Velas lookback",   minval=1,               group=grp_c12)
+min_wick12   = input.float(15.0, "Mecha mínima (%)", minval=0.1, step=0.1,  group=grp_c12)
+sl_pct12     = input.float(0.5,  "SL (%)",           minval=0.01, step=0.01, group=grp_c12)
+tp_pct12     = input.float(0.15, "TP (%)",           minval=0.01, step=0.01, group=grp_c12)
+
+
+// --- 9. CONFIGURACIÓN HORARIA ---
+grp_time = "Horario Colombia"
+use_time_filter = input.bool(false, "Activar filtro horario", group=grp_time)
+session_1 = input.session("1630-1800", "Franja 1", group=grp_time)
+session_2 = input.session("2300-0500", "Franja 2", group=grp_time)
+
+colombia_tz   = "America/Bogota"
+in_session_1  = not na(time(timeframe.period, session_1, colombia_tz))
+in_session_2  = not na(time(timeframe.period, session_2, colombia_tz))
+is_allowed_time = not use_time_filter or in_session_1 or in_session_2
+
+// --- 5. NIVELES MANUALES ---
+grp_levels  = "Tus Niveles del Día"
+show_levels = input.bool(true, "Mostrar niveles en el gráfico", group=grp_levels)
+res1        = input.float(0.0, "Resistencia 1", group=grp_levels)
+res2        = input.float(0.0, "Resistencia 2", group=grp_levels)
+res3        = input.float(0.0, "Resistencia 3", group=grp_levels)
+
+// --- 6. FEES Y CAPITAL (compartidos entre combos) ---
+grp_stats       = "Estadísticas"
+fee_sl_pct      = input.float(0.10,   "Fee extra SL (%)",                  minval=0.0, step=0.01, group=grp_stats)
+fee_tp_pct      = input.float(0.05,   "Fee descontado TP (%)",             minval=0.0, step=0.01, group=grp_stats)
+leverage        = input.float(10.0,   "Apalancamiento estadísticas",       minval=1.0, step=1.0,  group=grp_stats)
+initial_capital = input.float(1000.0, "Capital inicial interés compuesto", minval=1.0, step=1.0,  group=grp_stats)
+
+// --- 7. APARIENCIA ---
+grp_visual        = "Apariencia"
+range_color       = input.color(color.new(color.gray, 85), "Color de Zona Rango",          group=grp_visual)
+line_color        = input.color(color.new(color.orange, 0), "Color de Línea Techo (C1)",   group=grp_visual)
+show_range_lines  = input.bool(true,  "Mostrar techo del rango",                           group=grp_visual)
+show_signal_marks = input.bool(true,  "Mostrar marcas de señal",                           group=grp_visual)
+show_trade_lines  = input.bool(true,  "Mostrar líneas TP/SL",                              group=grp_visual)
+res_signal_color  = input.color(color.red, "Color señal resistencia manual",               group=grp_visual)
+
+// =============================================================================
+// CÁLCULOS COMPARTIDOS (mechas, tendencia EMA — iguales para todos los combos)
+// =============================================================================
+candle_range   = high - low
+upper_wick     = high - math.max(open, close)
+upper_wick_pct = candle_range > 0 ? (upper_wick / candle_range) * 100 : 0.0
+
+ema10 = ta.ema(close, 10)
+ema50 = ta.ema(close, 50)
+ema_min_gap_pct  = input.float(0.0, "Distancia mínima EMA (%)", minval=0.0, step=0.05, tooltip="EMA50 debe estar al menos este % por encima de EMA10 para señal bajista. 0 = sin filtro.", group=grp_stats)
+ema_gap_pct      = ema50 > 0 ? (ema50 - ema10) / ema50 * 100 : 0.0
+is_bearish_trend = ema10 < ema50 and ema_gap_pct >= ema_min_gap_pct
+
+// Función para toque de resistencia manual
+is_resistance_touch_with_wick(level) =>
+    level > 0 and high >= level and candle_range > 0 and upper_wick_pct >= min_wick_pct
+
+resistance_signal = is_resistance_touch_with_wick(res1) or is_resistance_touch_with_wick(res2) or is_resistance_touch_with_wick(res3)
+
+// =============================================================================
+// MÁQUINA DE ESTADOS — COMBO 1
+// =============================================================================
+highest_price   = ta.highest(high, lookback_candles)
+lowest_price    = ta.lowest(low,  lookback_candles)
+current_range_pct = close != 0 ? ((highest_price - lowest_price) / close) * 100 : 0.0
+
+is_tight_range   = min_range_pct <= max_range_pct and is_allowed_time and current_range_pct >= min_range_pct and current_range_pct <= max_range_pct
+new_range_started = is_tight_range and not is_tight_range[1]
+
+// alert_trigger y resistance_alert requieren is_tight_range — se declaran aquí
+alert_trigger    = resistance_signal and is_tight_range
+resistance_alert = resistance_signal and is_tight_range
+
+var float active_range_top        = na
+var bool  first_range_touch_done  = false
+
+if new_range_started
+    active_range_top       := highest_price
+    first_range_touch_done := false
+
+if not is_tight_range
+    active_range_top       := na
+    first_range_touch_done := false
+
+touch_range_top = is_tight_range and not first_range_touch_done and not na(active_range_top) and high >= active_range_top and candle_range > 0 and upper_wick_pct >= min_wick_pct
+
+// =============================================================================
+// MÁQUINA DE ESTADOS — COMBO 2
+// =============================================================================
+highest2      = ta.highest(high, lookback2)
+lowest2       = ta.lowest(low,  lookback2)
+range_pct2    = close != 0 ? ((highest2 - lowest2) / close) * 100 : 0.0
+
+is_tight2     = use_combo2 and min_range2 <= max_range2 and is_allowed_time and range_pct2 >= min_range2 and range_pct2 <= max_range2
+new_range2    = is_tight2 and not is_tight2[1]
+
+var float active_range_top2       = na
+var bool  first_touch_done2       = false
+
+if new_range2
+    active_range_top2 := highest2
+    first_touch_done2 := false
+
+if not is_tight2
+    active_range_top2 := na
+    first_touch_done2 := false
+
+touch_range_top2 = is_tight2 and not first_touch_done2 and not na(active_range_top2) and high >= active_range_top2 and candle_range > 0 and upper_wick_pct >= min_wick2
+
+// =============================================================================
+// MÁQUINA DE ESTADOS — COMBO 3
+// =============================================================================
+highest3      = ta.highest(high, lookback3)
+lowest3       = ta.lowest(low,  lookback3)
+range_pct3    = close != 0 ? ((highest3 - lowest3) / close) * 100 : 0.0
+
+is_tight3     = use_combo3 and min_range3 <= max_range3 and is_allowed_time and range_pct3 >= min_range3 and range_pct3 <= max_range3
+new_range3    = is_tight3 and not is_tight3[1]
+
+var float active_range_top3       = na
+var bool  first_touch_done3       = false
+
+if new_range3
+    active_range_top3 := highest3
+    first_touch_done3 := false
+
+if not is_tight3
+    active_range_top3 := na
+    first_touch_done3 := false
+
+touch_range_top3 = is_tight3 and not first_touch_done3 and not na(active_range_top3) and high >= active_range_top3 and candle_range > 0 and upper_wick_pct >= min_wick3
+
+// =============================================================================
+// MÁQUINA DE ESTADOS — COMBO 4
+// =============================================================================
+highest4      = ta.highest(high, lookback4)
+lowest4       = ta.lowest(low,  lookback4)
+range_pct4    = close != 0 ? ((highest4 - lowest4) / close) * 100 : 0.0
+
+is_tight4     = use_combo4 and min_range4 <= max_range4 and is_allowed_time and range_pct4 >= min_range4 and range_pct4 <= max_range4
+new_range4    = is_tight4 and not is_tight4[1]
+
+var float active_range_top4       = na
+var bool  first_touch_done4       = false
+
+if new_range4
+    active_range_top4 := highest4
+    first_touch_done4 := false
+
+if not is_tight4
+    active_range_top4 := na
+    first_touch_done4 := false
+
+touch_range_top4 = is_tight4 and not first_touch_done4 and not na(active_range_top4) and high >= active_range_top4 and candle_range > 0 and upper_wick_pct >= min_wick4
+
+// =============================================================================
+// MÁQUINA DE ESTADOS — COMBO 5
+// =============================================================================
+highest5      = ta.highest(high, lookback5)
+lowest5       = ta.lowest(low,  lookback5)
+range_pct5    = close != 0 ? ((highest5 - lowest5) / close) * 100 : 0.0
+
+is_tight5     = use_combo5 and min_range5 <= max_range5 and is_allowed_time and range_pct5 >= min_range5 and range_pct5 <= max_range5
+new_range5    = is_tight5 and not is_tight5[1]
+
+var float active_range_top5       = na
+var bool  first_touch_done5       = false
+
+if new_range5
+    active_range_top5 := highest5
+    first_touch_done5 := false
+
+if not is_tight5
+    active_range_top5 := na
+    first_touch_done5 := false
+
+touch_range_top5 = is_tight5 and not first_touch_done5 and not na(active_range_top5) and high >= active_range_top5 and candle_range > 0 and upper_wick_pct >= min_wick5
+
+// =============================================================================
+// MÁQUINA DE ESTADOS — COMBO 6
+// =============================================================================
+highest6      = ta.highest(high, lookback6)
+lowest6       = ta.lowest(low,  lookback6)
+range_pct6    = close != 0 ? ((highest6 - lowest6) / close) * 100 : 0.0
+
+is_tight6     = use_combo6 and min_range6 <= max_range6 and is_allowed_time and range_pct6 >= min_range6 and range_pct6 <= max_range6
+new_range6    = is_tight6 and not is_tight6[1]
+
+var float active_range_top6       = na
+var bool  first_touch_done6       = false
+
+if new_range6
+    active_range_top6 := highest6
+    first_touch_done6 := false
+
+if not is_tight6
+    active_range_top6 := na
+    first_touch_done6 := false
+
+touch_range_top6 = is_tight6 and not first_touch_done6 and not na(active_range_top6) and high >= active_range_top6 and candle_range > 0 and upper_wick_pct >= min_wick6
+
+// =============================================================================
+// MÁQUINA DE ESTADOS — COMBO 7
+// =============================================================================
+highest7      = ta.highest(high, lookback7)
+lowest7       = ta.lowest(low,  lookback7)
+range_pct7    = close != 0 ? ((highest7 - lowest7) / close) * 100 : 0.0
+
+is_tight7     = use_combo7 and min_range7 <= max_range7 and is_allowed_time and range_pct7 >= min_range7 and range_pct7 <= max_range7
+new_range7    = is_tight7 and not is_tight7[1]
+
+var float active_range_top7       = na
+var bool  first_touch_done7       = false
+
+if new_range7
+    active_range_top7 := highest7
+    first_touch_done7 := false
+
+if not is_tight7
+    active_range_top7 := na
+    first_touch_done7 := false
+
+touch_range_top7 = is_tight7 and not first_touch_done7 and not na(active_range_top7) and high >= active_range_top7 and candle_range > 0 and upper_wick_pct >= min_wick7
+
+
+
+// =============================================================================
+// MÁQUINA DE ESTADOS — COMBO 8
+// =============================================================================
+highest8      = ta.highest(high, lookback8)
+lowest8       = ta.lowest(low,  lookback8)
+range_pct8    = close != 0 ? ((highest8 - lowest8) / close) * 100 : 0.0
+
+is_tight8     = use_combo8 and min_range8 <= max_range8 and is_allowed_time and range_pct8 >= min_range8 and range_pct8 <= max_range8
+new_range8    = is_tight8 and not is_tight8[1]
+
+var float active_range_top8       = na
+var bool  first_touch_done8       = false
+
+if new_range8
+    active_range_top8 := highest8
+    first_touch_done8 := false
+
+if not is_tight8
+    active_range_top8 := na
+    first_touch_done8 := false
+
+touch_range_top8 = is_tight8 and not first_touch_done8 and not na(active_range_top8) and high >= active_range_top8 and candle_range > 0 and upper_wick_pct >= min_wick8
+
+// =============================================================================
+// MÁQUINA DE ESTADOS — COMBO 9
+// =============================================================================
+highest9      = ta.highest(high, lookback9)
+lowest9       = ta.lowest(low,  lookback9)
+range_pct9    = close != 0 ? ((highest9 - lowest9) / close) * 100 : 0.0
+
+is_tight9     = use_combo9 and min_range9 <= max_range9 and is_allowed_time and range_pct9 >= min_range9 and range_pct9 <= max_range9
+new_range9    = is_tight9 and not is_tight9[1]
+
+var float active_range_top9       = na
+var bool  first_touch_done9       = false
+
+if new_range9
+    active_range_top9 := highest9
+    first_touch_done9 := false
+
+if not is_tight9
+    active_range_top9 := na
+    first_touch_done9 := false
+
+touch_range_top9 = is_tight9 and not first_touch_done9 and not na(active_range_top9) and high >= active_range_top9 and candle_range > 0 and upper_wick_pct >= min_wick9
+
+// =============================================================================
+// MÁQUINA DE ESTADOS — COMBO 10
+// =============================================================================
+highest10      = ta.highest(high, lookback10)
+lowest10       = ta.lowest(low,  lookback10)
+range_pct10    = close != 0 ? ((highest10 - lowest10) / close) * 100 : 0.0
+
+is_tight10     = use_combo10 and min_range10 <= max_range10 and is_allowed_time and range_pct10 >= min_range10 and range_pct10 <= max_range10
+new_range10    = is_tight10 and not is_tight10[1]
+
+var float active_range_top10      = na
+var bool  first_touch_done10      = false
+
+if new_range10
+    active_range_top10 := highest10
+    first_touch_done10 := false
+
+if not is_tight10
+    active_range_top10 := na
+    first_touch_done10 := false
+
+touch_range_top10 = is_tight10 and not first_touch_done10 and not na(active_range_top10) and high >= active_range_top10 and candle_range > 0 and upper_wick_pct >= min_wick10
+
+// =============================================================================
+// MÁQUINA DE ESTADOS — COMBO 11
+// =============================================================================
+highest11      = ta.highest(high, lookback11)
+lowest11       = ta.lowest(low,  lookback11)
+range_pct11    = close != 0 ? ((highest11 - lowest11) / close) * 100 : 0.0
+
+is_tight11     = use_combo11 and min_range11 <= max_range11 and is_allowed_time and range_pct11 >= min_range11 and range_pct11 <= max_range11
+new_range11    = is_tight11 and not is_tight11[1]
+
+var float active_range_top11      = na
+var bool  first_touch_done11      = false
+
+if new_range11
+    active_range_top11 := highest11
+    first_touch_done11 := false
+
+if not is_tight11
+    active_range_top11 := na
+    first_touch_done11 := false
+
+touch_range_top11 = is_tight11 and not first_touch_done11 and not na(active_range_top11) and high >= active_range_top11 and candle_range > 0 and upper_wick_pct >= min_wick11
+
+// =============================================================================
+// MÁQUINA DE ESTADOS — COMBO 12
+// =============================================================================
+highest12      = ta.highest(high, lookback12)
+lowest12       = ta.lowest(low,  lookback12)
+range_pct12    = close != 0 ? ((highest12 - lowest12) / close) * 100 : 0.0
+
+is_tight12     = use_combo12 and min_range12 <= max_range12 and is_allowed_time and range_pct12 >= min_range12 and range_pct12 <= max_range12
+new_range12    = is_tight12 and not is_tight12[1]
+
+var float active_range_top12      = na
+var bool  first_touch_done12      = false
+
+if new_range12
+    active_range_top12 := highest12
+    first_touch_done12 := false
+
+if not is_tight12
+    active_range_top12 := na
+    first_touch_done12 := false
+
+touch_range_top12 = is_tight12 and not first_touch_done12 and not na(active_range_top12) and high >= active_range_top12 and candle_range > 0 and upper_wick_pct >= min_wick12
+
+
+// =============================================================================
+// SEÑALES CON PRIORIDAD: C1 > C2 > … > C12 — máximo 1 trade por día (UTC)
+// Todos evalúan el mismo can_fire_now antes de que se actualice daily_signal_used
+// =============================================================================
+new_day_utc = ta.change(time("D", "0000-0000", "UTC")) != 0
+
+var bool daily_signal_used = false
+
+if new_day_utc
+    daily_signal_used := false
+
+can_fire_now = not daily_signal_used
+
+final_signal_1  = touch_range_top   and can_fire_now and is_bearish_trend
+final_signal_2  = touch_range_top2  and can_fire_now and is_bearish_trend and not final_signal_1
+final_signal_3  = touch_range_top3  and can_fire_now and is_bearish_trend and not final_signal_1 and not final_signal_2
+final_signal_4  = touch_range_top4  and can_fire_now and is_bearish_trend and not final_signal_1 and not final_signal_2 and not final_signal_3
+final_signal_5  = touch_range_top5  and can_fire_now and is_bearish_trend and not final_signal_1 and not final_signal_2 and not final_signal_3 and not final_signal_4
+final_signal_6  = touch_range_top6  and can_fire_now and is_bearish_trend and not final_signal_1 and not final_signal_2 and not final_signal_3 and not final_signal_4 and not final_signal_5
+final_signal_7  = touch_range_top7  and can_fire_now and is_bearish_trend and not final_signal_1 and not final_signal_2 and not final_signal_3 and not final_signal_4 and not final_signal_5 and not final_signal_6
+final_signal_8  = touch_range_top8  and can_fire_now and is_bearish_trend and not final_signal_1 and not final_signal_2 and not final_signal_3 and not final_signal_4 and not final_signal_5 and not final_signal_6 and not final_signal_7
+final_signal_9  = touch_range_top9  and can_fire_now and is_bearish_trend and not final_signal_1 and not final_signal_2 and not final_signal_3 and not final_signal_4 and not final_signal_5 and not final_signal_6 and not final_signal_7 and not final_signal_8
+final_signal_10 = touch_range_top10 and can_fire_now and is_bearish_trend and not final_signal_1 and not final_signal_2 and not final_signal_3 and not final_signal_4 and not final_signal_5 and not final_signal_6 and not final_signal_7 and not final_signal_8 and not final_signal_9
+final_signal_11 = touch_range_top11 and can_fire_now and is_bearish_trend and not final_signal_1 and not final_signal_2 and not final_signal_3 and not final_signal_4 and not final_signal_5 and not final_signal_6 and not final_signal_7 and not final_signal_8 and not final_signal_9 and not final_signal_10
+final_signal_12 = touch_range_top12 and can_fire_now and is_bearish_trend and not final_signal_1 and not final_signal_2 and not final_signal_3 and not final_signal_4 and not final_signal_5 and not final_signal_6 and not final_signal_7 and not final_signal_8 and not final_signal_9 and not final_signal_10 and not final_signal_11
+
+// alias para compatibilidad con alertcondition y plotshape originales
+final_resistance_signal = final_signal_1
+final_any_signal = final_signal_1 or final_signal_2 or final_signal_3 or final_signal_4 or final_signal_5 or final_signal_6 or final_signal_7 or final_signal_8 or final_signal_9 or final_signal_10 or final_signal_11 or final_signal_12
+
+if final_any_signal
+    daily_signal_used := true
+
+// first_touch_done se setea solo cuando el trade realmente se abre (no en toque físico sin señal)
+if final_signal_1
+    first_range_touch_done := true
+if final_signal_2
+    first_touch_done2 := true
+if final_signal_3
+    first_touch_done3 := true
+if final_signal_4
+    first_touch_done4 := true
+if final_signal_5
+    first_touch_done5 := true
+if final_signal_6
+    first_touch_done6 := true
+if final_signal_7
+    first_touch_done7 := true
+if final_signal_8
+    first_touch_done8 := true
+if final_signal_9
+    first_touch_done9 := true
+if final_signal_10
+    first_touch_done10 := true
+if final_signal_11
+    first_touch_done11 := true
+if final_signal_12
+    first_touch_done12 := true
+
+// =============================================================================
+// TRADE — estado único (Pine Script solo puede trazar 1 trade a la vez)
+// El combo ganador (primero que dispara en el día) establece SL/TP propios.
+// =============================================================================
+var float entry_price      = na
+var float stop_loss_price  = na
+var float take_profit_price = na
+var bool  trade_open       = false
+var string trade_result    = "Sin trade"
+var int   entry_bar        = na
+
+// Flags: solo true en la vela exacta que abrió el trade (para plotshape)
+var bool opened_c1  = false
+var bool opened_c2  = false
+var bool opened_c3  = false
+var bool opened_c4  = false
+var bool opened_c5  = false
+var bool opened_c6  = false
+var bool opened_c7  = false
+var bool opened_c8  = false
+var bool opened_c9  = false
+var bool opened_c10 = false
+var bool opened_c11 = false
+var bool opened_c12 = false
+opened_c1  := false
+opened_c2  := false
+opened_c3  := false
+opened_c4  := false
+opened_c5  := false
+opened_c6  := false
+opened_c7  := false
+opened_c8  := false
+opened_c9  := false
+opened_c10 := false
+opened_c11 := false
+opened_c12 := false
+
+// Guardar effective pct del combo que abrió (varía según SL%/TP% del combo)
+var float trade_eff_tp_pct = 0.0
+var float trade_eff_sl_pct = 0.0
+
+// El trade continúa abierto aunque cambie el día — se cierra solo cuando alcanza TP o SL
+// Solo abre si no hay trade vigente (no sobreescribir trade anterior)
+if final_signal_1 and not trade_open
+    entry_price        := close
+    stop_loss_price    := entry_price * (1 + sl_pct  / 100)
+    take_profit_price  := entry_price * (1 - tp_pct  / 100)
+    trade_eff_tp_pct   := math.max(tp_pct  - fee_tp_pct, 0) * leverage
+    trade_eff_sl_pct   := (sl_pct  + fee_sl_pct) * leverage
+    trade_open         := true
+    entry_bar          := bar_index
+    trade_result       := "Abierto (C1)"
+    opened_c1          := true
+
+if final_signal_2 and not trade_open
+    entry_price        := close
+    stop_loss_price    := entry_price * (1 + sl_pct2 / 100)
+    take_profit_price  := entry_price * (1 - tp_pct2 / 100)
+    trade_eff_tp_pct   := math.max(tp_pct2 - fee_tp_pct, 0) * leverage
+    trade_eff_sl_pct   := (sl_pct2 + fee_sl_pct) * leverage
+    trade_open         := true
+    entry_bar          := bar_index
+    trade_result       := "Abierto (C2)"
+    opened_c2          := true
+
+if final_signal_3 and not trade_open
+    entry_price        := close
+    stop_loss_price    := entry_price * (1 + sl_pct3 / 100)
+    take_profit_price  := entry_price * (1 - tp_pct3 / 100)
+    trade_eff_tp_pct   := math.max(tp_pct3 - fee_tp_pct, 0) * leverage
+    trade_eff_sl_pct   := (sl_pct3 + fee_sl_pct) * leverage
+    trade_open         := true
+    entry_bar          := bar_index
+    trade_result       := "Abierto (C3)"
+    opened_c3          := true
+
+if final_signal_4 and not trade_open
+    entry_price        := close
+    stop_loss_price    := entry_price * (1 + sl_pct4 / 100)
+    take_profit_price  := entry_price * (1 - tp_pct4 / 100)
+    trade_eff_tp_pct   := math.max(tp_pct4 - fee_tp_pct, 0) * leverage
+    trade_eff_sl_pct   := (sl_pct4 + fee_sl_pct) * leverage
+    trade_open         := true
+    entry_bar          := bar_index
+    trade_result       := "Abierto (C4)"
+    opened_c4          := true
+
+if final_signal_5 and not trade_open
+    entry_price        := close
+    stop_loss_price    := entry_price * (1 + sl_pct5 / 100)
+    take_profit_price  := entry_price * (1 - tp_pct5 / 100)
+    trade_eff_tp_pct   := math.max(tp_pct5 - fee_tp_pct, 0) * leverage
+    trade_eff_sl_pct   := (sl_pct5 + fee_sl_pct) * leverage
+    trade_open         := true
+    entry_bar          := bar_index
+    trade_result       := "Abierto (C5)"
+    opened_c5          := true
+
+if final_signal_6 and not trade_open
+    entry_price        := close
+    stop_loss_price    := entry_price * (1 + sl_pct6 / 100)
+    take_profit_price  := entry_price * (1 - tp_pct6 / 100)
+    trade_eff_tp_pct   := math.max(tp_pct6 - fee_tp_pct, 0) * leverage
+    trade_eff_sl_pct   := (sl_pct6 + fee_sl_pct) * leverage
+    trade_open         := true
+    entry_bar          := bar_index
+    trade_result       := "Abierto (C6)"
+    opened_c6          := true
+
+if final_signal_7 and not trade_open
+    entry_price        := close
+    stop_loss_price    := entry_price * (1 + sl_pct7 / 100)
+    take_profit_price  := entry_price * (1 - tp_pct7 / 100)
+    trade_eff_tp_pct   := math.max(tp_pct7 - fee_tp_pct, 0) * leverage
+    trade_eff_sl_pct   := (sl_pct7 + fee_sl_pct) * leverage
+    trade_open         := true
+    entry_bar          := bar_index
+    trade_result       := "Abierto (C7)"
+    opened_c7          := true
+
+if final_signal_8 and not trade_open
+    entry_price        := close
+    stop_loss_price    := entry_price * (1 + sl_pct8 / 100)
+    take_profit_price  := entry_price * (1 - tp_pct8 / 100)
+    trade_eff_tp_pct   := math.max(tp_pct8 - fee_tp_pct, 0) * leverage
+    trade_eff_sl_pct   := (sl_pct8 + fee_sl_pct) * leverage
+    trade_open         := true
+    entry_bar          := bar_index
+    trade_result       := "Abierto (C8)"
+    opened_c8          := true
+
+if final_signal_9 and not trade_open
+    entry_price        := close
+    stop_loss_price    := entry_price * (1 + sl_pct9 / 100)
+    take_profit_price  := entry_price * (1 - tp_pct9 / 100)
+    trade_eff_tp_pct   := math.max(tp_pct9 - fee_tp_pct, 0) * leverage
+    trade_eff_sl_pct   := (sl_pct9 + fee_sl_pct) * leverage
+    trade_open         := true
+    entry_bar          := bar_index
+    trade_result       := "Abierto (C9)"
+    opened_c9          := true
+
+if final_signal_10 and not trade_open
+    entry_price        := close
+    stop_loss_price    := entry_price * (1 + sl_pct10 / 100)
+    take_profit_price  := entry_price * (1 - tp_pct10 / 100)
+    trade_eff_tp_pct   := math.max(tp_pct10 - fee_tp_pct, 0) * leverage
+    trade_eff_sl_pct   := (sl_pct10 + fee_sl_pct) * leverage
+    trade_open         := true
+    entry_bar          := bar_index
+    trade_result       := "Abierto (C10)"
+    opened_c10         := true
+
+if final_signal_11 and not trade_open
+    entry_price        := close
+    stop_loss_price    := entry_price * (1 + sl_pct11 / 100)
+    take_profit_price  := entry_price * (1 - tp_pct11 / 100)
+    trade_eff_tp_pct   := math.max(tp_pct11 - fee_tp_pct, 0) * leverage
+    trade_eff_sl_pct   := (sl_pct11 + fee_sl_pct) * leverage
+    trade_open         := true
+    entry_bar          := bar_index
+    trade_result       := "Abierto (C11)"
+    opened_c11         := true
+
+if final_signal_12 and not trade_open
+    entry_price        := close
+    stop_loss_price    := entry_price * (1 + sl_pct12 / 100)
+    take_profit_price  := entry_price * (1 - tp_pct12 / 100)
+    trade_eff_tp_pct   := math.max(tp_pct12 - fee_tp_pct, 0) * leverage
+    trade_eff_sl_pct   := (sl_pct12 + fee_sl_pct) * leverage
+    trade_open         := true
+    entry_bar          := bar_index
+    trade_result       := "Abierto (C12)"
+    opened_c12         := true
+
+// TP/SL solo se evalúan desde la vela SIGUIENTE a la entrada (usando bar_index != entry_bar)
+tp_hit = trade_open and not na(take_profit_price) and low  <= take_profit_price and bar_index != entry_bar
+sl_hit = trade_open and not na(stop_loss_price)  and high >= stop_loss_price   and bar_index != entry_bar
+
+// =============================================================================
+// ESTADÍSTICAS (compartidas — capital único)
+// =============================================================================
+var int   total_tp_count      = 0
+var int   total_sl_count      = 0
+var int   total_closed_trades = 0
+var float total_profit_pct    = 0.0
+var float total_loss_pct      = 0.0
+var float total_net_pct       = 0.0
+var float equity_pct          = 0.0
+var float equity_peak_pct     = 0.0
+var float max_drawdown_pct    = 0.0
+var float compound_capital    = na
+
+if barstate.isfirst
+    compound_capital := initial_capital
+    simple_capital   := initial_capital
+
+if tp_hit
+    trade_open          := false
+    entry_price         := na
+    stop_loss_price     := na
+    take_profit_price   := na
+    trade_result        := "TP ✅"
+    total_tp_count      += 1
+    total_closed_trades += 1
+    total_profit_pct    += trade_eff_tp_pct
+    total_net_pct       := total_profit_pct - total_loss_pct
+
+    equity_pct          += trade_eff_tp_pct
+    equity_peak_pct     := math.max(equity_peak_pct, equity_pct)
+    max_drawdown_pct    := math.max(max_drawdown_pct, equity_peak_pct - equity_pct)
+
+    simple_capital      := initial_capital * (1 + total_net_pct / 100)
+    compound_capital    := compound_capital * (1 + trade_eff_tp_pct / 100)
+
+else if sl_hit
+    trade_open          := false
+    entry_price         := na
+    stop_loss_price     := na
+    take_profit_price   := na
+    trade_result        := "SL ❌"
+    total_sl_count      += 1
+    total_closed_trades += 1
+    total_loss_pct      += trade_eff_sl_pct
+    total_net_pct       := total_profit_pct - total_loss_pct
+
+    equity_pct          -= trade_eff_sl_pct
+    equity_peak_pct     := math.max(equity_peak_pct, equity_pct)
+    max_drawdown_pct    := math.max(max_drawdown_pct, equity_peak_pct - equity_pct)
+
+    simple_capital      := initial_capital * (1 + total_net_pct / 100)
+    compound_capital    := compound_capital * (1 - trade_eff_sl_pct / 100)
+
+win_rate = total_closed_trades > 0 ? (total_tp_count / total_closed_trades) * 100 : 0.0
+
+// =============================================================================
+// VISUALES
+// =============================================================================
+bgcolor(is_tight_range ? range_color : na, title="Fondo Rango")
+
+plot(show_range_lines and is_tight_range ? active_range_top : na, "Techo C1", color=line_color,                         linewidth=1, style=plot.style_linebr)
+plot(show_range_lines and is_tight2 ? active_range_top2 : na, "Techo C2", color=color.new(color.purple,  0),             linewidth=1, style=plot.style_linebr)
+plot(show_range_lines and is_tight3 ? active_range_top3 : na, "Techo C3", color=color.new(color.teal,    0),             linewidth=1, style=plot.style_linebr)
+plot(show_range_lines and is_tight4 ? active_range_top4 : na, "Techo C4", color=color.new(color.blue,    0),             linewidth=1, style=plot.style_linebr)
+plot(show_range_lines and is_tight5 ? active_range_top5 : na, "Techo C5", color=color.new(color.fuchsia, 0),             linewidth=1, style=plot.style_linebr)
+plot(show_range_lines and is_tight6 ? active_range_top6 : na, "Techo C6", color=color.new(color.lime,    0),             linewidth=1, style=plot.style_linebr)
+plot(show_range_lines and is_tight7 ? active_range_top7 : na, "Techo C7", color=color.new(color.yellow,  0),             linewidth=1, style=plot.style_linebr)
+
+plot(show_range_lines and is_tight8 ? active_range_top8 : na, "Techo C8", color=color.new(color.aqua,    0),             linewidth=1, style=plot.style_linebr)
+plot(show_range_lines and is_tight9 ? active_range_top9 : na, "Techo C9", color=color.new(color.maroon,  0),             linewidth=1, style=plot.style_linebr)
+plot(show_range_lines and is_tight10 ? active_range_top10 : na, "Techo C10", color=color.new(color.silver, 0),            linewidth=1, style=plot.style_linebr)
+plot(show_range_lines and is_tight11 ? active_range_top11 : na, "Techo C11", color=color.new(color.navy,   0),            linewidth=1, style=plot.style_linebr)
+plot(show_range_lines and is_tight12 ? active_range_top12 : na, "Techo C12", color=color.new(color.olive,  0),            linewidth=1, style=plot.style_linebr)
+
+plot(show_levels and res1 > 0 ? res1 : na, "R1", color=color.red, style=plot.style_linebr)
+plot(show_levels and res2 > 0 ? res2 : na, "R2", color=color.red, style=plot.style_linebr)
+plot(show_levels and res3 > 0 ? res3 : na, "R3", color=color.red, style=plot.style_linebr)
+
+plotshape(show_signal_marks and opened_c1, title="Señal C1", style=shape.labeldown, location=location.abovebar, color=color.orange,                    textcolor=color.white, size=size.tiny, text="C1")
+plotshape(show_signal_marks and opened_c2, title="Señal C2", style=shape.labeldown, location=location.abovebar, color=color.new(color.purple,  0),     textcolor=color.white, size=size.tiny, text="C2")
+plotshape(show_signal_marks and opened_c3, title="Señal C3", style=shape.labeldown, location=location.abovebar, color=color.new(color.teal,    0),     textcolor=color.white, size=size.tiny, text="C3")
+plotshape(show_signal_marks and opened_c4, title="Señal C4", style=shape.labeldown, location=location.abovebar, color=color.new(color.blue,    0),     textcolor=color.white, size=size.tiny, text="C4")
+plotshape(show_signal_marks and opened_c5, title="Señal C5", style=shape.labeldown, location=location.abovebar, color=color.new(color.fuchsia, 0),     textcolor=color.white, size=size.tiny, text="C5")
+plotshape(show_signal_marks and opened_c6, title="Señal C6", style=shape.labeldown, location=location.abovebar, color=color.new(color.lime,    0),     textcolor=color.white, size=size.tiny, text="C6")
+plotshape(show_signal_marks and opened_c7, title="Señal C7", style=shape.labeldown, location=location.abovebar, color=color.new(color.yellow,  0),     textcolor=color.white, size=size.tiny, text="C7")
+
+plotshape(show_signal_marks and opened_c8,  title="Señal C8",  style=shape.labeldown, location=location.abovebar, color=color.new(color.aqua,    0), textcolor=color.black, size=size.tiny, text="C8")
+plotshape(show_signal_marks and opened_c9,  title="Señal C9",  style=shape.labeldown, location=location.abovebar, color=color.new(color.maroon,  0), textcolor=color.white, size=size.tiny, text="C9")
+plotshape(show_signal_marks and opened_c10, title="Señal C10", style=shape.labeldown, location=location.abovebar, color=color.new(color.silver,  0), textcolor=color.black, size=size.tiny, text="C10")
+plotshape(show_signal_marks and opened_c11, title="Señal C11", style=shape.labeldown, location=location.abovebar, color=color.new(color.navy,    0), textcolor=color.white, size=size.tiny, text="C11")
+plotshape(show_signal_marks and opened_c12, title="Señal C12", style=shape.labeldown, location=location.abovebar, color=color.new(color.olive,   0), textcolor=color.white, size=size.tiny, text="C12")
+
+plot(show_trade_lines and not na(entry_price)      ? entry_price      : na, "Entrada SHORT", color=color.yellow, linewidth=2, style=plot.style_linebr)
+plot(show_trade_lines and not na(stop_loss_price)  ? stop_loss_price  : na, "Stop Loss",     color=color.red,    linewidth=2, style=plot.style_linebr)
+plot(show_trade_lines and not na(take_profit_price)? take_profit_price: na, "Take Profit",   color=color.lime,   linewidth=2, style=plot.style_linebr)
+
+plotshape(tp_hit, title="TP alcanzado", style=shape.labelup,   location=location.belowbar, color=color.lime, textcolor=color.black, size=size.tiny, text="TP")
+plotshape(sl_hit, title="SL alcanzado", style=shape.labeldown, location=location.abovebar, color=color.red,  textcolor=color.white, size=size.tiny, text="SL")
+
+// =============================================================================
+// TABLAS
+// =============================================================================
+combos_active = 1 + (use_combo2 ? 1 : 0) + (use_combo3 ? 1 : 0) + (use_combo4 ? 1 : 0) + (use_combo5 ? 1 : 0) + (use_combo6 ? 1 : 0) + (use_combo7 ? 1 : 0) + (use_combo8 ? 1 : 0) + (use_combo9 ? 1 : 0) + (use_combo10 ? 1 : 0) + (use_combo11 ? 1 : 0) + (use_combo12 ? 1 : 0)
+
+var table info_panel  = table.new(position.bottom_right, 2, 11, bgcolor=color.new(color.black, 60))
+var table stats_panel = table.new(position.top_center,   2, 11, bgcolor=color.new(color.black, 60))
+
+if barstate.islast
+    state_text   = is_tight_range ? "SANO ✅" : "FUERA DE RANGO ❌"
+    signal_text  =
+         final_signal_1  ? "C1 — señal del día 🟠" :
+         final_signal_2  ? "C2 — señal del día 🟣" :
+         final_signal_3  ? "C3 — señal del día 🔵" :
+         final_signal_4  ? "C4 — señal del día 🔷" :
+         final_signal_5  ? "C5 — señal del día 🟤" :
+         final_signal_6  ? "C6 — señal del día 🟢" :
+         final_signal_7  ? "C7 — señal del día 🟡" :
+         final_signal_8  ? "C8 — señal del día 💧" :
+         final_signal_9  ? "C9 — señal del día 🟥" :
+         final_signal_10 ? "C10 — señal del día ⚪" :
+         final_signal_11 ? "C11 — señal del día 🌑" :
+         final_signal_12 ? "C12 — señal del día 🫒" :
+         resistance_alert ? "Toque R manual 🔴" :
+         "Sin señal"
+
+    val_col      = is_tight_range ? color.green : color.red
+    session_text = use_time_filter ? (in_session_1 ? "Franja 1" : in_session_2 ? "Franja 2" : "Fuera horario") : "24 horas"
+    trend_text   = is_bearish_trend ? "BAJISTA 🔴" : "ALCISTA 🟢"
+    trend_col    = is_bearish_trend ? color.red : color.green
+    net_col      = total_net_pct >= 0 ? color.green : color.red
+    dd_col       = max_drawdown_pct > 0 ? color.orange : color.gray
+
+    table.cell(info_panel, 0, 0,  "Rango C1 (%)",     text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 0,  str.tostring(current_range_pct, "#.##") + "%", text_color=color.white, bgcolor=val_col, text_size=size.normal)
+
+    table.cell(info_panel, 0, 1,  "Rango válido C1",  text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 1,  str.tostring(min_range_pct, "#.##") + "% - " + str.tostring(max_range_pct, "#.##") + "%", text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 2,  "Estado C1",        text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 2,  state_text,          text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 3,  "Tendencia EMA",    text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 3,  trend_text,          text_color=color.white, bgcolor=trend_col, text_size=size.small)
+
+    table.cell(info_panel, 0, 4,  "Mecha Superior",   text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 4,  str.tostring(upper_wick_pct, "#.##") + "%", text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 5,  "Horario",          text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 5,  session_text,        text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 6,  "Combos activos",   text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 6,  str.tostring(combos_active), text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 7,  "Señal actual",     text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 7,  signal_text,         text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 8,  "Entrada",          text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 8,  na(entry_price) ? "-" : str.tostring(entry_price, "#.##"), text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 9,  "SL / TP",          text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 9,  (na(stop_loss_price) or na(take_profit_price)) ? "-" : str.tostring(stop_loss_price, "#.##") + " / " + str.tostring(take_profit_price, "#.##"), text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 10, "Resultado",        text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 10, trade_result,        text_color=color.white, text_size=size.small)
+
+    table.cell(stats_panel, 0, 0,  "TP cerrados",     text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 0,  str.tostring(total_tp_count), text_color=color.white, bgcolor=color.new(color.green, 60), text_size=size.small)
+
+    table.cell(stats_panel, 0, 1,  "SL cerrados",     text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 1,  str.tostring(total_sl_count), text_color=color.white, bgcolor=color.new(color.red, 60), text_size=size.small)
+
+    table.cell(stats_panel, 0, 2,  "Trades cerrados", text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 2,  str.tostring(total_closed_trades), text_color=color.white, text_size=size.small)
+
+    table.cell(stats_panel, 0, 3,  "Ganancia acum. x" + str.tostring(leverage, "#"), text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 3,  str.tostring(total_profit_pct, "#.##") + "%", text_color=color.white, bgcolor=color.new(color.green, 70), text_size=size.small)
+
+    table.cell(stats_panel, 0, 4,  "Pérdida acum. x" + str.tostring(leverage, "#"), text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 4,  str.tostring(total_loss_pct, "#.##") + "%", text_color=color.white, bgcolor=color.new(color.red, 70), text_size=size.small)
+
+    table.cell(stats_panel, 0, 5,  "Neto simple x" + str.tostring(leverage, "#"), text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 5,  str.tostring(total_net_pct, "#.##") + "%", text_color=color.white, bgcolor=net_col, text_size=size.small)
+
+    table.cell(stats_panel, 0, 6,  "Win Rate",        text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 6,  str.tostring(win_rate, "#.##") + "%", text_color=color.white, text_size=size.small)
+
+    table.cell(stats_panel, 0, 7,  "Máx. caída",      text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 7,  str.tostring(max_drawdown_pct, "#.##") + "%", text_color=color.white, bgcolor=dd_col, text_size=size.small)
+
+    table.cell(stats_panel, 0, 8,  "Capital simple",  text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 8,  "$" + str.tostring(simple_capital, "#.##"), text_color=color.white, bgcolor=color.new(color.gray, 70), text_size=size.small)
+
+    table.cell(stats_panel, 0, 9,  "Capital compuesto", text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 9,  "$" + str.tostring(compound_capital, "#.##"), text_color=color.white, bgcolor=color.new(color.blue, 75), text_size=size.small)
+
+    table.cell(stats_panel, 0, 10, "Mejor método",    text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 10, compound_capital > simple_capital ? "Compuesto" : simple_capital > compound_capital ? "Simple" : "Iguales", text_color=color.white, text_size=size.small)
+
+// =============================================================================
+// ALERTAS
+// =============================================================================
+grp_accounts = "Subcuentas por cantidad de combos"
+account_12 = input.string("ESTRATEGIA_12", "Account con 12 combos", group=grp_accounts)
+account_11 = input.string("ESTRATEGIA_11", "Account con 11 combos", group=grp_accounts)
+account_10 = input.string("ESTRATEGIA_10", "Account con 10 combos", group=grp_accounts)
+account_9  = input.string("ESTRATEGIA_9", "Account con 9 combos",  group=grp_accounts)
+account_8  = input.string("ESTRATEGIA_8", "Account con 8 combos",  group=grp_accounts)
+account_7  = input.string("ESTRATEGIA_7", "Account con 7 combos",  group=grp_accounts)
+account_6  = input.string("ESTRATEGIA_6", "Account con 6 combos",  group=grp_accounts)
+account_5  = input.string("ESTRATEGIA_5", "Account con 5 combos",  group=grp_accounts)
+account_4  = input.string("ESTRATEGIA_4", "Account con 4 combos",  group=grp_accounts)
+account_3  = input.string("ESTRATEGIA_3", "Account con 3 combos",  group=grp_accounts)
+account_2  = input.string("ESTRATEGIA_2", "Account con 2 combos",  group=grp_accounts)
+account_1  = input.string("ESTRATEGIA_1", "Account con 1 combo",   group=grp_accounts)
+alertcondition(alert_trigger,     "Resistencia tocada con mecha en rango sano", "El precio tocó una resistencia manual con mecha mínima dentro del rango sano")
+alertcondition(resistance_alert,  "Toque en Resistencia Manual",                "El precio tocó una resistencia manual con mecha mínima dentro del rango sano")
+alertcondition(is_tight_range and not is_tight_range[1], "Entrada en Rango",   "BTC ha entrado en zona de compresión")
+alertcondition(final_any_signal,  "Señal válida del día (cualquier combo)",     "Se produjo la primera señal de resistencia válida del día")
+alertcondition(final_signal_1,    "Señal C1 — R única por día",                 "Combo 1 disparó la primera señal de resistencia válida del día")
+alertcondition(final_signal_2,    "Señal C2 — R única por día",                 "Combo 2 disparó la primera señal de resistencia válida del día")
+alertcondition(final_signal_3,    "Señal C3 — R única por día",                 "Combo 3 disparó la primera señal de resistencia válida del día")
+alertcondition(final_signal_4,    "Señal C4 — R única por día",                 "Combo 4 disparó la primera señal de resistencia válida del día")
+alertcondition(final_signal_5,    "Señal C5 — R única por día",                 "Combo 5 disparó la primera señal de resistencia válida del día")
+alertcondition(final_signal_6,    "Señal C6 — R única por día",                 "Combo 6 disparó la primera señal de resistencia válida del día")
+alertcondition(final_signal_7,    "Señal C7 — R única por día",                 "Combo 7 disparó la primera señal de resistencia válida del día")
+alertcondition(final_signal_8,    "Señal C8 — R única por día",                 "Combo 8 disparó la primera señal de resistencia válida del día")
+alertcondition(final_signal_9,    "Señal C9 — R única por día",                 "Combo 9 disparó la primera señal de resistencia válida del día")
+alertcondition(final_signal_10,   "Señal C10 — R única por día",                "Combo 10 disparó la primera señal de resistencia válida del día")
+alertcondition(final_signal_11,   "Señal C11 — R única por día",                "Combo 11 disparó la primera señal de resistencia válida del día")
+alertcondition(final_signal_12,   "Señal C12 — R única por día",                "Combo 12 disparó la primera señal de resistencia válida del día")
+alertcondition(tp_hit,            "TP alcanzado",                               "El precio alcanzó el Take Profit de la operación SHORT")
+alertcondition(sl_hit,            "SL alcanzado",                               "El precio alcanzó el Stop Loss de la operación SHORT")
+
+active_account =
+     combos_active == 12 ? account_12 :
+     combos_active == 11 ? account_11 :
+     combos_active == 10 ? account_10 :
+     combos_active == 9  ? account_9  :
+     combos_active == 8  ? account_8  :
+     combos_active == 7  ? account_7  :
+     combos_active == 6  ? account_6  :
+     combos_active == 5  ? account_5  :
+     combos_active == 4  ? account_4  :
+     combos_active == 3  ? account_3  :
+     combos_active == 2  ? account_2  :
+                           account_1
+// Alerta dinámica JSON → webhook
+if final_any_signal
+    _tp = final_signal_1 ? tp_pct : final_signal_2 ? tp_pct2 : final_signal_3 ? tp_pct3 : final_signal_4 ? tp_pct4 : final_signal_5 ? tp_pct5 : final_signal_6 ? tp_pct6 : final_signal_7 ? tp_pct7 : final_signal_8 ? tp_pct8 : final_signal_9 ? tp_pct9 : final_signal_10 ? tp_pct10 : final_signal_11 ? tp_pct11 : tp_pct12
+    _sl = final_signal_1 ? sl_pct : final_signal_2 ? sl_pct2 : final_signal_3 ? sl_pct3 : final_signal_4 ? sl_pct4 : final_signal_5 ? sl_pct5 : final_signal_6 ? sl_pct6 : final_signal_7 ? sl_pct7 : final_signal_8 ? sl_pct8 : final_signal_9 ? sl_pct9 : final_signal_10 ? sl_pct10 : final_signal_11 ? sl_pct11 : sl_pct12
+    alert('{"secret":"TestAndres","account":"' + active_account + '","tipo":"R","tp":' + str.tostring(_tp) + ',"sl":' + str.tostring(_sl) + '}', alert.freq_once_per_bar_close)

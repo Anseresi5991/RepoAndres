@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(jobs -l)",
+      "Bash(curl -s http://localhost:3001/api/status)",
+      "Bash(cmd /c \"echo %COMPUTERNAME%\")",
+      "Bash(cmd /c \"whoami /all 2>&1 | head -5\")"
+    ]
+  }
+}
