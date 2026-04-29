@@ -206,18 +206,9 @@ export function runBacktest(candles, params) {
       const tpHit = low <= t.tp
       const slHit = high >= dynamicSL
 
-      if (tpHit) {
-        totalTp++
-        totalClosed++
-        totalProfitPct += effectiveTpPct
-        totalNetPct = totalProfitPct - totalLossPct
-        equityPct += effectiveTpPct
-        equityPeakPct = Math.max(equityPeakPct, equityPct)
-        maxDrawdownPct = Math.max(maxDrawdownPct, equityPeakPct - equityPct)
-        simpleCapital = initialCapital * (1 + totalNetPct / 100)
-        compoundCapital = compoundCapital * (1 + effectiveTpPct / 100)
-        trades.push({ ...t, result: 'TP', closeTime: candle.OpenTime, closePrice: t.tp, capitalAtExit: compoundCapital })
-      } else if (slHit) {
+      // SL tiene prioridad: si ambos niveles son tocados en la misma vela,
+      // asumimos SL primero (conservador — no sabemos el orden intra-vela)
+      if (slHit) {
         // Con trailing, la pérdida real es menor si el SL fue acercado
         const actualLossPct = (t.currentSLpct + feeSlPct) * leverage
         totalSl++
@@ -230,6 +221,17 @@ export function runBacktest(candles, params) {
         simpleCapital = initialCapital * (1 + totalNetPct / 100)
         compoundCapital = compoundCapital * (1 - actualLossPct / 100)
         trades.push({ ...t, result: 'SL', closeTime: candle.OpenTime, closePrice: dynamicSL, capitalAtExit: compoundCapital })
+      } else if (tpHit) {
+        totalTp++
+        totalClosed++
+        totalProfitPct += effectiveTpPct
+        totalNetPct = totalProfitPct - totalLossPct
+        equityPct += effectiveTpPct
+        equityPeakPct = Math.max(equityPeakPct, equityPct)
+        maxDrawdownPct = Math.max(maxDrawdownPct, equityPeakPct - equityPct)
+        simpleCapital = initialCapital * (1 + totalNetPct / 100)
+        compoundCapital = compoundCapital * (1 + effectiveTpPct / 100)
+        trades.push({ ...t, result: 'TP', closeTime: candle.OpenTime, closePrice: t.tp, capitalAtExit: compoundCapital })
       } else {
         stillOpen.push(t)
       }
@@ -419,17 +421,8 @@ export function runMultiBacktest(candles, combos, shared) {
       const tpHit = low <= t.tp
       const slHit = high >= t.sl
 
-      if (tpHit) {
-        totalTp++; totalClosed++
-        totalProfitPct += t.effectiveTpPct
-        totalNetPct = totalProfitPct - totalLossPct
-        equityPct += t.effectiveTpPct
-        equityPeakPct = Math.max(equityPeakPct, equityPct)
-        maxDrawdownPct = Math.max(maxDrawdownPct, equityPeakPct - equityPct)
-        simpleCapital = initialCapital * (1 + totalNetPct / 100)
-        compoundCapital = compoundCapital * (1 + t.effectiveTpPct / 100)
-        trades.push({ ...t, result: 'TP', closeTime: candle.OpenTime, closePrice: t.tp, capitalAtExit: compoundCapital })
-      } else if (slHit) {
+      // SL tiene prioridad: colisión TP+SL en misma vela → asumimos SL (conservador)
+      if (slHit) {
         totalSl++; totalClosed++
         totalLossPct += t.effectiveSlPct
         totalNetPct = totalProfitPct - totalLossPct
@@ -439,6 +432,16 @@ export function runMultiBacktest(candles, combos, shared) {
         simpleCapital = initialCapital * (1 + totalNetPct / 100)
         compoundCapital = compoundCapital * (1 - t.effectiveSlPct / 100)
         trades.push({ ...t, result: 'SL', closeTime: candle.OpenTime, closePrice: t.sl, capitalAtExit: compoundCapital })
+      } else if (tpHit) {
+        totalTp++; totalClosed++
+        totalProfitPct += t.effectiveTpPct
+        totalNetPct = totalProfitPct - totalLossPct
+        equityPct += t.effectiveTpPct
+        equityPeakPct = Math.max(equityPeakPct, equityPct)
+        maxDrawdownPct = Math.max(maxDrawdownPct, equityPeakPct - equityPct)
+        simpleCapital = initialCapital * (1 + totalNetPct / 100)
+        compoundCapital = compoundCapital * (1 + t.effectiveTpPct / 100)
+        trades.push({ ...t, result: 'TP', closeTime: candle.OpenTime, closePrice: t.tp, capitalAtExit: compoundCapital })
       } else {
         stillOpen.push(t)
       }

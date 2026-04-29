@@ -6,7 +6,8 @@ import { runSupertrendBacktest } from './backtesterSupertrend.js'
 import { runConfluenceBacktest } from './backtesterConfluence.js'
 import { runEmaPullbackBacktest } from './backtesterEmaPullback.js'
 import { runPinBarBacktest } from './backtesterPinBar.js'
-import { runSoporteBacktest } from './backtesterSoporte.js'
+import { runSoporteBacktest, runMultiSoporteBacktest } from './backtesterSoporte.js'
+import { runEmaTouchBacktest, runMultiEmaTouchBacktest } from './backtesterEma.js'
 import * as XLSX from 'xlsx'
 import './App.css'
 
@@ -27,6 +28,9 @@ const isSoporteMode              = new URLSearchParams(window.location.search).g
 const isSoporteOptimMode         = isSoporteMode && new URLSearchParams(window.location.search).get('mode') === 'optim'
 const isSoporteExcelOptimMode    = isSoporteMode && new URLSearchParams(window.location.search).get('mode') === 'exceloptim'
 const isPortfolioMode            = new URLSearchParams(window.location.search).get('mode') === 'portfolio'
+const isEmaMode                  = new URLSearchParams(window.location.search).get('strategy') === 'ema'
+const isEmaOptimMode             = isEmaMode && new URLSearchParams(window.location.search).get('mode') === 'optim'
+const isEmaExcelOptimMode        = isEmaMode && new URLSearchParams(window.location.search).get('mode') === 'exceloptim'
 
 // ── Helpers para paralelizar el Análisis Profundo en múltiples workers ──
 function optRangeValues(min, max, step) {
@@ -68,6 +72,64 @@ function mergeWorkerRankings(resultArrays) {
   const all = []
   for (const b of rangeMap.values()) for (const c of b) all.push(c)
   return all.sort((a, b) => b._score - a._score)
+}
+
+function mergeEmaWorkerRankings(resultArrays) {
+  const periodMap = new Map()
+  for (const results of resultArrays) {
+    if (!results?.length) continue
+    for (const c of results) {
+      const key = `${c.emaPeriod}`
+      if (!periodMap.has(key)) periodMap.set(key, [])
+      const bucket = periodMap.get(key)
+      if (bucket.length < 5) {
+        bucket.push(c); bucket.sort((a, b) => b._score - a._score)
+      } else if (c._score > bucket[4]._score) {
+        bucket[4] = c; bucket.sort((a, b) => b._score - a._score)
+      }
+    }
+  }
+  const all = []
+  for (const b of periodMap.values()) for (const c of b) all.push(c)
+  return all.sort((a, b) => b._score - a._score)
+}
+
+const DEFAULT_EMA_TOUCH_PARAMS = {
+  emaPeriod:          20,
+  slowEmaPeriod:      200,
+  emaSlopeLookback:   5,
+  emaConsistencyBars: 3,
+  maxBodyPct:         50,
+  atrPeriod:          14,
+  atrMaPeriod:        20,
+  atrMaxMultiplier:   1.5,
+  rsiPeriod:          14,
+  rsiShortMax:        65,
+  rsiLongMin:         35,
+  minCrossBodyPct:    30,
+  minWickPct:     15.0,
+  slPct:          0.5,
+  tpPct:          0.15,
+  feeSlPct:       0.10,
+  feeTpPct:       0.05,
+  leverage:       10,
+  initialCapital: 1000,
+  monthlyContribution: 0,
+  direction:      'BOTH',
+  dateFrom:       '2022-01-01',
+  dateTo:         new Date().toISOString().split('T')[0],
+}
+
+const DEFAULT_EMA_TOUCH_OPTIM = {
+  emaPeriod:  { min: 5,   max: 200, step: 5   },
+  minWickPct: { min: 5,   max: 40,  step: 5   },
+  slPct:      { min: 0.3, max: 1.0, step: 0.2 },
+  tpPct:      { min: 0.1, max: 0.5, step: 0.1 },
+}
+
+function countEmaTouchCombinations(optimRanges) {
+  return ['emaPeriod', 'minWickPct', 'slPct', 'tpPct']
+    .reduce((acc, k) => acc * rangeValues(optimRanges[k].min, optimRanges[k].max, optimRanges[k].step).length, 1)
 }
 
 const DEFAULT_PARAMS = {
@@ -289,6 +351,16 @@ const DEFAULT_SAR_PARAMS = {
 const DEFAULT_MULTI_COMBOS = [
   { label: 'Combo 1', minRangePct: 0.6, maxRangePct: 1.2, lookbackCandles: 20, minWickPct: 15, slPct: 0.5, tpPct: 0.15 },
   { label: 'Combo 2', minRangePct: 0.6, maxRangePct: 1.2, lookbackCandles: 20, minWickPct: 15, slPct: 0.5, tpPct: 0.15 },
+]
+
+const DEFAULT_SOPORTE_MULTI_COMBOS = [
+  { label: 'Combo 1', minRangePct: 0.6, maxRangePct: 1.2, lookbackCandles: 20, minWickPct: 15, slPct: 0.5, tpPct: 0.15 },
+  { label: 'Combo 2', minRangePct: 0.6, maxRangePct: 1.2, lookbackCandles: 20, minWickPct: 15, slPct: 0.5, tpPct: 0.15 },
+]
+
+const DEFAULT_EMA_TOUCH_MULTI_COMBOS = [
+  { label: 'Combo 1', emaPeriod: 20, minWickPct: 15, slPct: 0.5, tpPct: 0.15 },
+  { label: 'Combo 2', emaPeriod: 50, minWickPct: 15, slPct: 0.5, tpPct: 0.15 },
 ]
 
 function rangeValues(min, max, step) {
@@ -1279,6 +1351,7 @@ function SupertrendView() {
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=emapullback' }}>📉 EMA Pullback</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
         </div>
       </header>
 
@@ -1758,6 +1831,7 @@ function AppMain() {
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=emapullback' }}>📉 EMA Pullback</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
         </div>
       </header>
 
@@ -2707,6 +2781,7 @@ function SarView() {
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=emapullback' }}>📉 EMA Pullback</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
         </div>
       </header>
 
@@ -3195,6 +3270,7 @@ function PinBarView() {
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=emapullback' }}>📉 EMA Pullback</button>
           <button className="strategy-tab active">🕯️ Pin Bar</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
         </div>
       </header>
 
@@ -3673,6 +3749,9 @@ function EmaPullbackView() {
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend' }}>📊 Supertrend</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=confluence' }}>🎯 Confluencia</button>
           <button className="strategy-tab active">📉 EMA Pullback</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
         </div>
       </header>
 
@@ -4170,6 +4249,7 @@ function ConfluenceView() {
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=emapullback' }}>📉 EMA Pullback</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
         </div>
       </header>
 
@@ -5021,6 +5101,8 @@ function SoporteView() {
   const [optimMode, setOptimMode] = useState(false)
   const [optimRanges, setOptimRanges] = useState(DEFAULT_SOPORTE_OPTIM)
   const optimBcRef = useRef(null)
+  const [multiMode, setMultiMode] = useState(false)
+  const [multiCombos, setMultiCombos] = useState(DEFAULT_SOPORTE_MULTI_COMBOS)
 
   const estimatedCombos = useMemo(() => countSoporteCombinations(optimRanges), [optimRanges])
 
@@ -5090,6 +5172,41 @@ function SoporteView() {
     URL.revokeObjectURL(url)
   }
 
+  const addSoporteCombo = () => setMultiCombos(cs =>
+    cs.length < 15
+      ? [...cs, { ...DEFAULT_SOPORTE_MULTI_COMBOS[0], label: `Combo ${cs.length + 1}` }]
+      : cs
+  )
+  const removeSoporteCombo = (ci) => setMultiCombos(cs => cs.filter((_, i) => i !== ci))
+  const updateSoporteCombo = (ci, key, raw) => {
+    const val = key === 'lookbackCandles' ? parseInt(raw) || 1 : parseFloat(raw) || 0
+    setMultiCombos(cs => cs.map((c, i) => i === ci ? { ...c, [key]: val } : c))
+  }
+
+  async function handleMultiSoporteRun() {
+    setLoading(true); setError(null); setResult(null)
+    try {
+      const resp = await fetch(`/api/candles?from=${params.dateFrom}&to=${params.dateTo}`)
+      if (!resp.ok) throw new Error((await resp.json()).error)
+      const { candles, total } = await resp.json()
+      if (!total) throw new Error('No se encontraron velas en ese rango de fechas.')
+      const bt = runMultiSoporteBacktest(candles, multiCombos, {
+        feeSlPct: params.feeSlPct,
+        feeTpPct: params.feeTpPct,
+        leverage: params.leverage,
+        initialCapital: params.initialCapital,
+        monthlyContribution: params.monthlyContribution,
+        emaMinGapPct: params.emaMinGapPct,
+      })
+      setResult({ ...bt, totalCandles: total })
+      setActiveTab('stats')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function handleOptimize() {
     setError(null)
     try {
@@ -5146,6 +5263,7 @@ function SoporteView() {
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=emapullback' }}>📉 EMA Pullback</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
           <button className="strategy-tab active">📗 Rango + Soporte</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
         </div>
       </header>
 
@@ -5208,7 +5326,68 @@ function SoporteView() {
             </Section>
 
             <div className="section optim-section">
-              <div className="optim-section-header" onClick={() => setOptimMode(v => !v)}>
+              <div className="optim-section-header" onClick={() => { setMultiMode(v => !v); setOptimMode(false) }}>
+                <span className="section-title" style={{marginBottom:0, borderBottom:'none', paddingBottom:0}}>🎯 Multi-Combinaciones</span>
+                <span className="optim-chevron">{multiMode ? '▲' : '▼'}</span>
+              </div>
+              {multiMode && (
+                <div className="optim-body">
+                  <div style={{fontSize:11, color:'var(--text-muted)', marginBottom:8, lineHeight:1.5}}>
+                    Hasta 15 combos activos. Solo 1 trade/día — gana el primero que dispare señal.
+                  </div>
+                  {multiCombos.map((combo, ci) => (
+                    <div key={ci} className="multi-combo-block">
+                      <div className="multi-combo-header">
+                        <span style={{fontSize:11, fontWeight:700, color:'var(--accent)', textTransform:'uppercase', letterSpacing:'0.06em'}}>
+                          Combo {ci + 1}
+                        </span>
+                        {multiCombos.length > 1 && (
+                          <button className="multi-remove-btn" onClick={() => removeSoporteCombo(ci)}>✕</button>
+                        )}
+                      </div>
+                      <div className="multi-combo-fields">
+                        <div className="multi-field">
+                          <label>Min%</label>
+                          <input type="number" step="0.1" value={combo.minRangePct} onChange={e => updateSoporteCombo(ci, 'minRangePct', e.target.value)} />
+                        </div>
+                        <div className="multi-field">
+                          <label>Max%</label>
+                          <input type="number" step="0.1" value={combo.maxRangePct} onChange={e => updateSoporteCombo(ci, 'maxRangePct', e.target.value)} />
+                        </div>
+                        <div className="multi-field">
+                          <label>LB</label>
+                          <input type="number" step="1" min="1" value={combo.lookbackCandles} onChange={e => updateSoporteCombo(ci, 'lookbackCandles', e.target.value)} />
+                        </div>
+                        <div className="multi-field">
+                          <label>Mecha%</label>
+                          <input type="number" step="0.1" value={combo.minWickPct} onChange={e => updateSoporteCombo(ci, 'minWickPct', e.target.value)} />
+                        </div>
+                        <div className="multi-field">
+                          <label>SL%</label>
+                          <input type="number" step="0.01" value={combo.slPct} onChange={e => updateSoporteCombo(ci, 'slPct', e.target.value)} />
+                        </div>
+                        <div className="multi-field">
+                          <label>TP%</label>
+                          <input type="number" step="0.01" value={combo.tpPct} onChange={e => updateSoporteCombo(ci, 'tpPct', e.target.value)} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {multiCombos.length < 15 && (
+                    <button
+                      className="run-btn optim-btn"
+                      style={{width:'100%', marginTop:4, padding:'8px', fontSize:12}}
+                      onClick={addSoporteCombo}
+                    >
+                      + Agregar combo
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="section optim-section">
+              <div className="optim-section-header" onClick={() => { setOptimMode(v => !v); setMultiMode(false) }}>
                 <span className="section-title" style={{marginBottom:0, borderBottom:'none', paddingBottom:0}}>🔬 Análisis Profundo</span>
                 <span className="optim-chevron">{optimMode ? '▲' : '▼'}</span>
               </div>
@@ -5233,7 +5412,11 @@ function SoporteView() {
 
           </div>
           <div className="sidebar-footer">
-            {optimMode
+            {multiMode
+              ? <button className="run-btn" onClick={handleMultiSoporteRun} disabled={loading || !dbStatus?.connected}>
+                  {loading ? <><span className="spinner" /> Procesando...</> : '▶ Ejecutar Multi-Backtest'}
+                </button>
+              : optimMode
               ? <>
                   <button className="run-btn optim-btn" onClick={handleOptimize} disabled={!dbStatus?.connected}>
                     🔬 Abrir Análisis Profundo
@@ -5303,15 +5486,17 @@ function SoporteView() {
                     <StatCard label={params.monthlyContribution > 0 ? 'Capital compuesto (+ aportes)' : 'Capital compuesto'} value={`$${parseFloat(stats.compoundCapital).toLocaleString('es-CO',{minimumFractionDigits:2})}`} variant="accent" />
                     {params.monthlyContribution > 0 && <StatCard label="Total aportado" value={`$${parseFloat(stats.totalContributed).toLocaleString('es-CO',{minimumFractionDigits:2})}`} variant="neutral" />}
                     <StatCard label="Mejor método"                          value={stats.bestMethod}    variant="accent" />
-                    <StatCard label={`TP efectivo x${params.leverage}`}     value={`${stats.effectiveTpPct}%`} variant="neutral" />
-                    <StatCard label={`SL efectivo x${params.leverage}`}     value={`${stats.effectiveSlPct}%`} variant="neutral" />
+                    {!result.isMulti && <StatCard label={`TP efectivo x${params.leverage}`} value={`${stats.effectiveTpPct}%`} variant="neutral" />}
+                    {!result.isMulti && <StatCard label={`SL efectivo x${params.leverage}`} value={`${stats.effectiveSlPct}%`} variant="neutral" />}
+                    {result.isMulti && <StatCard label="Combos activos" value={multiCombos.length} variant="neutral" />}
                   </div>
 
                   {result.trades.length > 0 && (() => {
                     const effTp = parseFloat(stats.effectiveTpPct || 0)
                     const effSl = parseFloat(stats.effectiveSlPct || 0)
-                    const { byYear, byMonth } = computePeriodStats(result.trades, effTp, effSl)
+                    const { byYear, byMonth, byCombo } = computePeriodStats(result.trades, effTp, effSl)
                     return <>
+                      {result.isMulti && <PeriodTable title="🎯 Acumulado por combo" rows={byCombo} />}
                       <PeriodTable title="📅 Acumulado por año" rows={byYear}  />
                       <PeriodTable title="📆 Acumulado por mes" rows={byMonth} />
                     </>
@@ -5352,13 +5537,14 @@ function SoporteView() {
                       <table className="data-table">
                         <thead>
                           <tr>
-                            <th>#</th><th>Señal</th><th>Entrada</th><th>TP precio</th><th>SL precio</th><th>Cierre</th><th>Resultado</th><th>Capital entrada</th><th>Capital salida</th>
+                            <th>#</th>{result.isMulti && <th>Combo</th>}<th>Señal</th><th>Entrada</th><th>TP precio</th><th>SL precio</th><th>Cierre</th><th>Resultado</th><th>Capital entrada</th><th>Capital salida</th>
                           </tr>
                         </thead>
                         <tbody>
                           {result.trades.map((t, i) => (
                             <tr key={i} className={t.result === 'TP' ? 'row-win' : 'row-loss'}>
                               <td>{i + 1}</td>
+                              {result.isMulti && <td style={{fontSize:11, color:'var(--accent)'}}>{t.comboLabel}</td>}
                               <td>{new Date(t.time).toLocaleString('es-CO',{timeZone:'UTC'})}</td>
                               <td>${parseFloat(t.price).toLocaleString('en-US')}</td>
                               <td className="tp-cell">${parseFloat(t.tp).toLocaleString('en-US')}</td>
@@ -5384,13 +5570,14 @@ function SoporteView() {
                       <table className="data-table">
                         <thead>
                           <tr>
-                            <th>#</th><th>Fecha señal</th><th>Precio entrada</th><th>Rango %</th><th>Mecha inf %</th><th>TP</th><th>SL</th>
+                            <th>#</th>{result.isMulti && <th>Combo</th>}<th>Fecha señal</th><th>Precio entrada</th><th>Rango %</th><th>Mecha inf %</th><th>TP</th><th>SL</th>
                           </tr>
                         </thead>
                         <tbody>
                           {result.signals.map((s, i) => (
                             <tr key={i} className="row-win">
                               <td>{i + 1}</td>
+                              {result.isMulti && <td style={{fontSize:11, color:'var(--accent)'}}>{s.comboLabel}</td>}
                               <td>{new Date(s.time).toLocaleString('es-CO',{timeZone:'UTC'})}</td>
                               <td>${parseFloat(s.price).toLocaleString('en-US')}</td>
                               <td>{s.rangePct}%</td>
@@ -5987,7 +6174,1103 @@ function RangoResistenciaPortfolioView() {
   )
 }
 
+// =============================================================================
+// EmaOptimView — Análisis Profundo EMA Touch
+// =============================================================================
+function EmaOptimView() {
+  const [status, setStatus]     = useState('waiting')
+  const [progress, setProgress] = useState(null)
+  const [ranking, setRanking]   = useState([])
+  const [errorMsg, setErrorMsg] = useState('')
+  const bcRef      = useRef(null)
+  const startRef   = useRef(null)
+
+  useEffect(() => {
+    let retryTimer = null
+    const bc = new BroadcastChannel('btc-ema-optim')
+    bcRef.current = bc
+
+    function sendReady() { bc.postMessage({ type: 'ready' }) }
+    sendReady()
+    retryTimer = setTimeout(sendReady, 1200)
+
+    bc.onmessage = (msg) => {
+      if (msg.data.type !== 'init') return
+      clearTimeout(retryTimer)
+      const { candles, optimRanges, params } = msg.data
+      setStatus('running')
+      startRef.current = Date.now()
+
+      const allPeriods = optRangeValues(
+        optimRanges.emaPeriod.min,
+        optimRanges.emaPeriod.max,
+        optimRanges.emaPeriod.step
+      ).map(v => Math.round(v))
+      const chunks    = chunkArray(allPeriods, Math.min(navigator.hardwareConcurrency || 4, allPeriods.length))
+      const numW      = chunks.length
+      const wpDone    = new Array(numW).fill(0)
+      const wpTotal   = new Array(numW).fill(0)
+      const wpResults = new Array(numW).fill(null)
+      let doneCount   = 0
+      const workersArr = []
+
+      chunks.forEach((subset, wi) => {
+        const w = new Worker(new URL('./emaOptimWorker.js', import.meta.url), { type: 'module' })
+        w.onmessage = (ev) => {
+          const m = ev.data
+          if (m.type === 'progress') {
+            wpDone[wi] = m.done; wpTotal[wi] = m.total
+            if (m.topResults?.length) wpResults[wi] = m.topResults
+            const totalDone = wpDone.reduce((s, v) => s + v, 0)
+            const totalAll  = wpTotal.reduce((s, v) => s + v, 0)
+            const elapsed   = Date.now() - startRef.current
+            const eta = (totalDone >= 100 && elapsed >= 500)
+              ? Math.round((totalAll - totalDone) / (totalDone / elapsed)) : null
+            setProgress({ done: totalDone, total: totalAll, eta })
+            const merged = mergeEmaWorkerRankings(wpResults)
+            if (merged.length) setRanking(merged)
+          } else if (m.type === 'done') {
+            wpDone[wi] = wpTotal[wi]; wpResults[wi] = m.results ?? []
+            doneCount++; w.terminate()
+            if (doneCount === numW) {
+              setStatus('done')
+              setProgress(p => p ? { ...p, done: p.total } : null)
+              setRanking(mergeEmaWorkerRankings(wpResults))
+            }
+          } else if (m.type === 'error') {
+            setErrorMsg(m.message); setStatus('error')
+            workersArr.forEach(wk => wk.terminate())
+          }
+        }
+        w.onerror = (ev) => { setErrorMsg(ev.message); setStatus('error'); workersArr.forEach(wk => wk.terminate()) }
+        w.postMessage({ candles, optimRanges, params, emaPeriodSubset: subset })
+        workersArr.push(w)
+      })
+    }
+    return () => { clearTimeout(retryTimer); bc.close() }
+  }, [])
+
+  function applyParams(row) { bcRef.current?.postMessage({ type: 'apply', row }) }
+
+  function handleExportExcel() {
+    const rows = ranking.map((r, i) => ({
+      '#':          i + 1,
+      'Score':      parseFloat(r._score?.toFixed(4)),
+      'EMA':        r.emaPeriod,
+      'Mecha%':     r.minWickPct,
+      'SL%':        r.slPct,
+      'TP%':        r.tpPct,
+      'Trades':     r.totalClosed,
+      'Win%':       r.winRate,
+      'Neto%':      r.totalNetPct,
+      'Drawdown%':  r.maxDrawdownPct,
+      'Capital':    parseFloat(r.compoundCapital),
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'EMA Touch Profundo')
+    XLSX.writeFile(wb, 'analisis_profundo_ema_touch.xlsx')
+  }
+
+  const pct = progress ? Math.round(progress.done / progress.total * 100) : 0
+
+  return (
+    <div className="optim-page">
+      <header className="optim-page-header">
+        <div className="logo">
+          <span className="logo-icon">₿</span>
+          <div>
+            <div className="logo-title">MariaPaz<span style={{color:'var(--accent)'}}>Indicator</span></div>
+            <div className="logo-sub">🔬 EMA Touch · Análisis Profundo · Ranking en vivo</div>
+          </div>
+        </div>
+        <div className="optim-page-status">
+          {status === 'waiting' && 'Esperando datos de la pestaña EMA Touch...'}
+          {status === 'running' && progress && (
+            <span>
+              {progress.done.toLocaleString()} / {progress.total.toLocaleString()} · {pct}%
+              {progress.eta != null && ` · faltan ${formatEta(progress.eta)}`}
+              {' · '}{ranking.length} en ranking
+            </span>
+          )}
+          {status === 'done'  && <span style={{color:'var(--green)'}}>✅ Completado · {ranking.length} en ranking</span>}
+          {status === 'error' && <span style={{color:'var(--red)'}}>⚠️ {errorMsg}</span>}
+        </div>
+      </header>
+
+      {progress && (
+        <div className="optim-page-progress">
+          <div className="progress-track" style={{borderRadius:0, height:3}}>
+            <div className="progress-fill" style={{width:`${pct}%`, transition:'width 0.5s ease'}} />
+          </div>
+        </div>
+      )}
+
+      <div className="optim-page-body">
+        {status === 'done' && ranking.length >= 2 && (
+          <button
+            className="run-btn optim-btn"
+            style={{width:'100%', marginBottom:8, background:'var(--green)', color:'#000'}}
+            onClick={handleExportExcel}
+          >
+            📥 Exportar ranking a Excel
+          </button>
+        )}
+
+        {ranking.length > 0 && (
+          <>
+            <div className="optim-rank-meta">
+              Ranking por Score = Neto% ÷ Drawdown% · top 5 por período EMA
+              {status === 'running' && ' · actualizando en vivo...'}
+            </div>
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Score</th>
+                    <th>EMA</th><th>Mecha%</th><th>SL%</th><th>TP%</th>
+                    <th>Trades</th><th>Win%</th><th>Neto%</th><th>Drawdown%</th><th>Capital $</th>
+                    <th>Aplicar</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ranking.map((r, i) => (
+                    <tr key={i} className="row-win">
+                      <td>{i + 1}</td>
+                      <td style={{color:'var(--accent)', fontWeight:600}}>{r._score?.toFixed(2)}</td>
+                      <td style={{fontWeight:600}}>{r.emaPeriod}</td>
+                      <td>{r.minWickPct}</td>
+                      <td>{r.slPct}</td>
+                      <td>{r.tpPct}</td>
+                      <td>{r.totalClosed}</td>
+                      <td>{r.winRate}%</td>
+                      <td className="tp-cell">{r.totalNetPct}%</td>
+                      <td className={parseFloat(r.maxDrawdownPct) > 20 ? 'sl-cell' : ''}>{r.maxDrawdownPct}%</td>
+                      <td>${parseFloat(r.compoundCapital).toLocaleString('es-CO', {minimumFractionDigits:2})}</td>
+                      <td><button className="apply-btn" onClick={() => applyParams(r)} title="Aplicar en pestaña EMA Touch">▶</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// =============================================================================
+// EmaExcelOptimView — Multi-Combo Excel para EMA Touch
+// =============================================================================
+function EmaExcelOptimView() {
+  const [combos, setCombos]         = useState([])
+  const [fileName, setFileName]     = useState('')
+  const [candles, setCandles]       = useState(null)
+  const [status, setStatus]         = useState('idle')
+  const [progress, setProgress]     = useState(null)
+  const [ranking, setRanking]       = useState([])
+  const [errorMsg, setErrorMsg]     = useState('')
+  const [dateFrom, setDateFrom]     = useState('2022-01-01')
+  const [dateTo, setDateTo]         = useState(new Date().toISOString().split('T')[0])
+  const [params, setParams]         = useState({
+    feeSlPct: 0.10, feeTpPct: 0.05, leverage: 10, initialCapital: 1000,
+    slowEmaPeriod: 200, direction: 'BOTH',
+  })
+  const [sortKey, setSortKey]       = useState('_score')
+  const [sortDir, setSortDir]       = useState('desc')
+  const [showCombos, setShowCombos] = useState(false)
+  const [minTrades, setMinTrades]   = useState(0)
+  const [maxTrades, setMaxTrades]   = useState(9999)
+  const startTimeRef  = useRef(null)
+  const workerRef     = useRef(null)
+  const fileInputRef  = useRef(null)
+
+  function parseNum(v) {
+    if (typeof v === 'number') return v
+    if (typeof v === 'string') return parseFloat(v.replace(',', '.'))
+    return NaN
+  }
+
+  function handleFile(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    setFileName(file.name)
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const wb = XLSX.read(ev.target.result, { type: 'array' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' })
+      const parsed = rows.map(row => ({
+        emaPeriod:  Math.round(parseNum(row['EMA'] ?? row['emaPeriod'] ?? row['EmaPeriod'])),
+        minWickPct: parseNum(row['Mecha%'] ?? row['minWickPct'] ?? row['Wick%']),
+        slPct:      parseNum(row['SL%']    ?? row['slPct']),
+        tpPct:      parseNum(row['TP%']    ?? row['tpPct']),
+        _score:     parseNum(row['Score']  ?? row['_score'] ?? 0),
+      })).filter(c =>
+        !isNaN(c.emaPeriod) && c.emaPeriod > 0 &&
+        !isNaN(c.minWickPct) && !isNaN(c.slPct) && !isNaN(c.tpPct)
+      )
+      setCombos(parsed)
+      setRanking([])
+      setStatus('idle')
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
+  async function handleLoadCandles() {
+    setStatus('loadingCandles')
+    setErrorMsg('')
+    try {
+      const res = await fetch(`http://localhost:3001/api/candles?from=${dateFrom}&to=${dateTo}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error cargando velas')
+      setCandles(data.candles)
+      setStatus('idle')
+    } catch (err) {
+      setErrorMsg(err.message)
+      setStatus('error')
+    }
+  }
+
+  function handleRun() {
+    if (!candles || combos.length < 3) return
+    workerRef.current?.terminate()
+    setStatus('running')
+    setRanking([])
+    setProgress(null)
+    startTimeRef.current = Date.now()
+
+    const worker = new Worker(new URL('./emaExcelMultiWorker.js', import.meta.url), { type: 'module' })
+    workerRef.current = worker
+    worker.onmessage = (ev) => {
+      const m = ev.data
+      if (m.type === 'progress') {
+        const elapsed = Date.now() - startTimeRef.current
+        let eta = null
+        if (m.done >= 50 && elapsed >= 500) eta = Math.round((m.total - m.done) / (m.done / elapsed))
+        setProgress({ done: m.done, total: m.total, eta })
+        if (m.topResults?.length > 0) setRanking(m.topResults)
+      } else if (m.type === 'done') {
+        setStatus('done')
+        setProgress(p => p ? { ...p, done: p.total } : null)
+        if (m.results?.length > 0) setRanking(m.results)
+        worker.terminate()
+      } else if (m.type === 'error') {
+        setErrorMsg(m.message)
+        setStatus('error')
+        worker.terminate()
+      }
+    }
+    worker.onerror = (ev) => { setErrorMsg(ev.message); setStatus('error'); worker.terminate() }
+    worker.postMessage({ combos, candles, params, groupSizes: [3,4,5,6,7,8,9,10,11,12,13,14,15], samplesPerSize: 5000 })
+  }
+
+  function handleSort(key) {
+    if (sortKey === key) setSortDir(d => d === 'desc' ? 'asc' : 'desc')
+    else { setSortKey(key); setSortDir('desc') }
+  }
+
+  const sortedRanking = useMemo(() => {
+    if (!ranking.length) return []
+    return [...ranking]
+      .filter(r => {
+        const tc = parseInt(r.totalClosed)
+        return tc >= minTrades && tc <= maxTrades
+      })
+      .sort((a, b) => {
+        const av = parseFloat(a[sortKey] ?? 0)
+        const bv = parseFloat(b[sortKey] ?? 0)
+        return sortDir === 'desc' ? bv - av : av - bv
+      })
+  }, [ranking, sortKey, sortDir, minTrades, maxTrades])
+
+  function fmtEta(ms) {
+    if (!ms) return ''
+    const s = Math.round(ms / 1000)
+    return s < 60 ? `~${s}s` : `~${Math.floor(s/60)}m ${s%60}s`
+  }
+
+  function SortTh({ col, label }) {
+    const active = sortKey === col
+    return (
+      <th onClick={() => handleSort(col)}
+        style={{cursor:'pointer', userSelect:'none', color: active ? 'var(--accent)' : undefined, whiteSpace:'nowrap'}}>
+        {label}{' '}{active
+          ? (sortDir === 'desc' ? '▼' : '▲')
+          : <span style={{opacity:0.25}}>▼</span>}
+      </th>
+    )
+  }
+
+  function comboLabel(c) {
+    return `EMA${c.emaPeriod} W${c.minWickPct} SL${c.slPct} TP${c.tpPct}`
+  }
+
+  const pct = progress ? Math.round(progress.done / progress.total * 100) : 0
+  const isRunning        = status === 'running'
+  const isLoadingCandles = status === 'loadingCandles'
+  const canRun = candles && combos.length >= 3 && !isRunning && !isLoadingCandles
+
+  const inputStyle = { width:'100%', background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'var(--radius)', color:'var(--text)', padding:'7px 10px', fontFamily:'var(--font-mono)', fontSize:13 }
+
+  return (
+    <div className="optim-page">
+
+      <header className="optim-page-header">
+        <div className="logo">
+          <span className="logo-icon">₿</span>
+          <div>
+            <div className="logo-title">MariaPaz<span style={{color:'var(--accent)'}}>Indicator</span></div>
+            <div className="logo-sub">🔬 EMA Touch · Multi-Combo · Desde Excel</div>
+          </div>
+        </div>
+        <div className="optim-page-status">
+          {status === 'idle' && combos.length === 0 && 'Carga un archivo Excel para comenzar'}
+          {status === 'idle' && combos.length > 0 && !candles && `${combos.length} combos cargados · Carga velas para continuar`}
+          {status === 'idle' && combos.length > 0 && candles && `${combos.length} combos · ${candles.length.toLocaleString()} velas · Listo`}
+          {isLoadingCandles && 'Cargando velas desde BD...'}
+          {isRunning && progress && (
+            <span>
+              {progress.done.toLocaleString()} / {progress.total.toLocaleString()} · {pct}%
+              {progress.eta != null && ` · faltan ${fmtEta(progress.eta)}`}
+              {' · '}{ranking.length} grupos
+            </span>
+          )}
+          {status === 'done' && <span style={{color:'var(--green)'}}>✅ Completado · {ranking.length} grupos</span>}
+          {status === 'error' && <span style={{color:'var(--red)'}}>⚠️ {errorMsg}</span>}
+        </div>
+      </header>
+
+      {(isRunning || status === 'done') && progress && (
+        <div className="optim-page-progress">
+          <div className="progress-track" style={{borderRadius:0, height:3}}>
+            <div className="progress-fill" style={{width:`${pct}%`, transition:'width 0.5s ease'}}/>
+          </div>
+        </div>
+      )}
+
+      <div className="optim-page-body">
+
+        <div style={{background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:'var(--radius-lg)', padding:'20px 24px', marginBottom:20}}>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:24}}>
+
+            {/* Columna izquierda: archivo + fechas + botón cargar */}
+            <div style={{display:'flex', flexDirection:'column', gap:14}}>
+              <div>
+                <div className="optim-label" style={{marginBottom:6}}>Archivo Excel (ranking Análisis Profundo EMA Touch)</div>
+                <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleFile} style={{display:'none'}}/>
+                <div style={{display:'flex', alignItems:'center', gap:10}}>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    style={{...inputStyle, width:'auto', padding:'7px 14px', cursor:'pointer', background:'var(--bg-3)', fontFamily:'var(--font-ui)', fontWeight:600, fontSize:13, border:'1px solid var(--border-light)'}}>
+                    📂 Seleccionar archivo
+                  </button>
+                  {fileName
+                    ? <div style={{fontSize:12, fontFamily:'var(--font-mono)', lineHeight:1.4}}>
+                        <div style={{color:'var(--green)'}}>✓ {fileName}</div>
+                        <div style={{color:'var(--text-muted)'}}>{combos.length} combos válidos</div>
+                      </div>
+                    : <span style={{fontSize:12, color:'var(--text-muted)', fontFamily:'var(--font-mono)'}}>Sin archivo seleccionado</span>
+                  }
+                </div>
+              </div>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
+                <div>
+                  <div className="optim-label" style={{marginBottom:4}}>Desde</div>
+                  <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={inputStyle}/>
+                </div>
+                <div>
+                  <div className="optim-label" style={{marginBottom:4}}>Hasta</div>
+                  <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={inputStyle}/>
+                </div>
+              </div>
+              <button className="run-btn" style={{padding:'9px'}} onClick={handleLoadCandles} disabled={isLoadingCandles || isRunning}>
+                {isLoadingCandles ? <><span className="spinner"/> Cargando velas...</> : '📥 Cargar velas desde BD'}
+              </button>
+            </div>
+
+            {/* Columna derecha: params + botón ejecutar */}
+            <div style={{display:'flex', flexDirection:'column', gap:14}}>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
+                {[['Fee SL%','feeSlPct',0.01],['Fee TP%','feeTpPct',0.01],['Apalancamiento','leverage',1],['Capital inicial $','initialCapital',100],['EMA lenta','slowEmaPeriod',1]].map(([label, key, step]) => (
+                  <div key={key}>
+                    <div className="optim-label" style={{marginBottom:4}}>{label}</div>
+                    <input type="number" step={step} value={params[key]}
+                      onChange={e => setParams(p => ({...p, [key]: parseFloat(e.target.value)}))}
+                      style={inputStyle}/>
+                  </div>
+                ))}
+                <div>
+                  <div className="optim-label" style={{marginBottom:4}}>Dirección</div>
+                  <select value={params.direction}
+                    onChange={e => setParams(p => ({...p, direction: e.target.value}))}
+                    style={inputStyle}>
+                    <option value="BOTH">BOTH (SHORT+LONG)</option>
+                    <option value="R">SHORT only</option>
+                    <option value="S">LONG only</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{marginTop:'auto'}}>
+                {status === 'error' && (
+                  <div style={{marginBottom:8, padding:'8px 12px', background:'var(--red-dim)', border:'1px solid rgba(239,68,68,0.3)', borderRadius:'var(--radius)', fontSize:12, color:'var(--red)', fontFamily:'var(--font-mono)'}}>
+                    ⚠️ {errorMsg}
+                  </div>
+                )}
+                <button className="run-btn optim-btn" style={{width:'100%', padding:11}} onClick={handleRun} disabled={!canRun}>
+                  {isRunning
+                    ? <><span className="spinner"/> Analizando grupos de 3–15 combos EMA...</>
+                    : `🎲 Buscar mejores combinaciones (${combos.length} combos)`}
+                </button>
+                <div style={{fontSize:11, color:'var(--text-muted)', textAlign:'center', marginTop:6, fontFamily:'var(--font-mono)'}}>
+                  Grupos de 3 al 15 combos · 5 000 muestras por tamaño · drawdown ≤ 50%
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {combos.length > 0 && (
+          <div style={{marginBottom:16}}>
+            <button onClick={() => setShowCombos(v => !v)}
+              style={{background:'none', border:'none', color:'var(--text-muted)', fontSize:12, fontFamily:'var(--font-mono)', cursor:'pointer', padding:'4px 0', display:'flex', alignItems:'center', gap:6}}>
+              {showCombos ? '▼' : '▶'} Ver combos cargados ({combos.length})
+            </button>
+            {showCombos && (
+              <div className="table-wrap" style={{marginTop:8}}>
+                <table className="data-table">
+                  <thead>
+                    <tr><th>#</th><th>EMA</th><th>Mecha%</th><th>SL%</th><th>TP%</th><th>Score</th></tr>
+                  </thead>
+                  <tbody>
+                    {combos.map((c, i) => (
+                      <tr key={i}>
+                        <td style={{color:'var(--text-muted)'}}>{i+1}</td>
+                        <td style={{fontWeight:600}}>{c.emaPeriod}</td>
+                        <td>{c.minWickPct}</td>
+                        <td>{c.slPct}</td><td>{c.tpPct}</td>
+                        <td style={{color:'var(--accent)', fontWeight:600}}>{c._score.toFixed(1)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {ranking.length > 0 && (
+          <>
+            <div className="optim-rank-meta" style={{display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:10}}>
+              <span>{sortedRanking.length} / {ranking.length} grupos · Score = Neto% ÷ Drawdown% · drawdown ≤ 50%{isRunning && ' · actualizando en vivo...'}</span>
+              <div style={{display:'flex', alignItems:'center', gap:8, fontSize:12, fontFamily:'var(--font-mono)'}}>
+                <span style={{color:'var(--text-muted)'}}>Trades:</span>
+                <input type="number" min={0} value={minTrades} onChange={e => setMinTrades(Math.max(0, parseInt(e.target.value) || 0))}
+                  style={{width:60, background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'var(--radius)', color:'var(--text)', padding:'3px 7px', fontFamily:'var(--font-mono)', fontSize:12, textAlign:'center'}}
+                  title="Mínimo de trades"/>
+                <span style={{color:'var(--text-muted)'}}>–</span>
+                <input type="number" min={0} value={maxTrades} onChange={e => setMaxTrades(Math.max(0, parseInt(e.target.value) || 9999))}
+                  style={{width:60, background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'var(--radius)', color:'var(--text)', padding:'3px 7px', fontFamily:'var(--font-mono)', fontSize:12, textAlign:'center'}}
+                  title="Máximo de trades"/>
+              </div>
+            </div>
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <SortTh col="_score"          label="Score"/>
+                    <SortTh col="size"            label="Combos"/>
+                    <th>Parámetros</th>
+                    <SortTh col="totalClosed"     label="Trades"/>
+                    <SortTh col="winRate"         label="Win%"/>
+                    <SortTh col="totalNetPct"     label="Neto%"/>
+                    <SortTh col="maxDrawdownPct"  label="Drawdown%"/>
+                    <SortTh col="compoundCapital" label="Capital $"/>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedRanking.map((r, i) => {
+                    const net = parseFloat(r.totalNetPct)
+                    const dd  = parseFloat(r.maxDrawdownPct)
+                    const sizeColors = { 3:['var(--blue-dim)','var(--blue)'], 4:['var(--green-dim)','var(--green)'], 5:['var(--accent-dim)','var(--accent)'], 6:['var(--orange-dim)','var(--orange)'], 7:['var(--red-dim)','var(--red)'] }
+                    const [bgC, fgC] = sizeColors[r.size] ?? ['var(--bg-3)','var(--text)']
+                    return (
+                      <tr key={i} className="row-win">
+                        <td style={{color:'var(--text-muted)'}}>{i+1}</td>
+                        <td style={{color:'var(--accent)', fontWeight:700}}>{r._score.toFixed(2)}</td>
+                        <td style={{textAlign:'center'}}>
+                          <span style={{padding:'2px 10px', borderRadius:20, fontSize:11, fontWeight:600, background:bgC, color:fgC}}>{r.size}</span>
+                        </td>
+                        <td style={{fontSize:10, lineHeight:1.8}}>
+                          {r.combos.map((c, ci) => (
+                            <div key={ci} style={{whiteSpace:'nowrap'}}>
+                              <span style={{color:'var(--text-muted)', marginRight:5}}>#{c.idx+1}</span>
+                              <span style={{color:'var(--text-dim)'}}>{comboLabel(c)}</span>
+                            </div>
+                          ))}
+                        </td>
+                        <td>{r.totalClosed}</td>
+                        <td>{r.winRate}%</td>
+                        <td className={net >= 0 ? 'tp-cell' : 'sl-cell'}>{r.totalNetPct}%</td>
+                        <td className={dd > 30 ? 'sl-cell' : ''}>{r.maxDrawdownPct}%</td>
+                        <td style={{fontWeight:600}}>
+                          ${parseFloat(r.compoundCapital).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+      </div>
+    </div>
+  )
+}
+
+// =============================================================================
+// EmaView — Vista principal EMA Touch
+// =============================================================================
+function EmaView() {
+  const [params, setParams]         = useState(DEFAULT_EMA_TOUCH_PARAMS)
+  const [result, setResult]         = useState(null)
+  const [loading, setLoading]       = useState(false)
+  const [error, setError]           = useState(null)
+  const [dbStatus, setDbStatus]     = useState(null)
+  const [activeTab, setActiveTab]   = useState('stats')
+  const [optimMode, setOptimMode]   = useState(false)
+  const [multiMode, setMultiMode]   = useState(false)
+  const [multiEmaCombo, setMultiEmaCombo] = useState(DEFAULT_EMA_TOUCH_MULTI_COMBOS)
+  const [optimRanges, setOptimRanges] = useState(DEFAULT_EMA_TOUCH_OPTIM)
+  const optimBcRef = useRef(null)
+
+  const estimatedCombos = useMemo(() => countEmaTouchCombinations(optimRanges), [optimRanges])
+
+  useEffect(() => {
+    fetch('/api/status')
+      .then(r => r.json())
+      .then(d => setDbStatus(d))
+      .catch(() => setDbStatus({ connected: false, error: 'No se pudo conectar al servidor' }))
+  }, [])
+
+  const set = (key, val) => setParams(p => ({ ...p, [key]: val }))
+  const num = (key, val) => set(key, parseFloat(val) || 0)
+  const int = (key, val) => set(key, parseInt(val) || 1)
+  const setOF = (field, key, val) =>
+    setOptimRanges(r => ({ ...r, [field]: { ...r[field], [key]: parseFloat(val) || 0 } }))
+
+  function applyOptimResult(row) {
+    setParams(p => ({
+      ...p,
+      emaPeriod:  row.emaPeriod,
+      minWickPct: row.minWickPct,
+      slPct:      row.slPct,
+      tpPct:      row.tpPct,
+    }))
+  }
+
+  useEffect(() => {
+    const bc = new BroadcastChannel('btc-ema-optim')
+    optimBcRef.current = bc
+    bc.onmessage = (e) => {
+      if (e.data.type === 'apply') {
+        applyOptimResult(e.data.row)
+      }
+    }
+    return () => bc.close()
+  }, [])
+
+  async function handleRun() {
+    setLoading(true); setError(null); setResult(null)
+    try {
+      const resp = await fetch(`/api/candles?from=${params.dateFrom}&to=${params.dateTo}`)
+      if (!resp.ok) throw new Error((await resp.json()).error)
+      const { candles, total } = await resp.json()
+      if (!total) throw new Error('No se encontraron velas en ese rango de fechas.')
+      const bt = runEmaTouchBacktest(candles, params)
+      if (!bt) throw new Error('Datos insuficientes para ese período de EMA.')
+      setResult({ ...bt, totalCandles: total })
+      setActiveTab('stats')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleOptimize() {
+    setError(null)
+    try {
+      const resp = await fetch(`/api/candles?from=${params.dateFrom}&to=${params.dateTo}`)
+      if (!resp.ok) throw new Error((await resp.json()).error)
+      const { candles, total } = await resp.json()
+      if (!total) throw new Error('No se encontraron velas en ese rango de fechas.')
+
+      if (optimBcRef.current) optimBcRef.current.close()
+      const bc = new BroadcastChannel('btc-ema-optim')
+      optimBcRef.current = bc
+      bc.onmessage = (e) => {
+        if (e.data.type === 'ready') bc.postMessage({ type: 'init', candles, optimRanges, params })
+        else if (e.data.type === 'apply') applyOptimResult(e.data.row)
+      }
+      window.open(window.location.pathname + '?strategy=ema&mode=optim', '_blank')
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
+  const addEmaCombo = () => setMultiEmaCombo(cs =>
+    cs.length < 15
+      ? [...cs, { ...DEFAULT_EMA_TOUCH_MULTI_COMBOS[0], label: `Combo ${cs.length + 1}` }]
+      : cs
+  )
+  const removeEmaCombo = (ci) => setMultiEmaCombo(cs => cs.filter((_, i) => i !== ci))
+  const updateEmaCombo = (ci, key, raw) => {
+    const val = key === 'emaPeriod' ? parseInt(raw) || 1 : parseFloat(raw) || 0
+    setMultiEmaCombo(cs => cs.map((c, i) => i === ci ? { ...c, [key]: val } : c))
+  }
+
+  async function handleMultiRun() {
+    setLoading(true); setError(null); setResult(null)
+    try {
+      const resp = await fetch(`/api/candles?from=${params.dateFrom}&to=${params.dateTo}`)
+      if (!resp.ok) throw new Error((await resp.json()).error)
+      const { candles, total } = await resp.json()
+      if (!total) throw new Error('No se encontraron velas en ese rango de fechas.')
+      const bt = runMultiEmaTouchBacktest(candles, multiEmaCombo, {
+        feeSlPct: params.feeSlPct,
+        feeTpPct: params.feeTpPct,
+        leverage: params.leverage,
+        initialCapital: params.initialCapital,
+        monthlyContribution: params.monthlyContribution,
+        slowEmaPeriod: params.slowEmaPeriod,
+        emaSlopeLookback: params.emaSlopeLookback,
+        emaConsistencyBars: params.emaConsistencyBars,
+        maxBodyPct: params.maxBodyPct,
+        minCrossBodyPct: params.minCrossBodyPct,
+        atrPeriod: params.atrPeriod,
+        atrMaPeriod: params.atrMaPeriod,
+        atrMaxMultiplier: params.atrMaxMultiplier,
+        rsiPeriod: params.rsiPeriod,
+        rsiShortMax: params.rsiShortMax,
+        rsiLongMin: params.rsiLongMin,
+        direction: params.direction,
+      })
+      if (!bt) throw new Error('Datos insuficientes.')
+      setResult({ ...bt, totalCandles: total })
+      setActiveTab('stats')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const stats   = result?.stats ?? {}
+  const winRate = parseFloat(stats.winRate     ?? 0)
+  const netPct  = parseFloat(stats.totalNetPct ?? 0)
+
+  const navButtons = (
+    <>
+      <button className="strategy-tab" onClick={() => { window.location.href = '/' }}>📐 Rango + Resistencias</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=sar' }}>📈 SAR</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend' }}>📊 Supertrend</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=confluence' }}>🎯 Confluencia</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=emapullback' }}>📉 EMA Pullback</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
+      <button className="strategy-tab active">📡 EMA Touch</button>
+    </>
+  )
+
+  return (
+    <div className="app">
+      <header className="header">
+        <div className="header-inner">
+          <div className="logo">
+            <span className="logo-icon">₿</span>
+            <div>
+              <div className="logo-title">MariaPaz<span style={{color:'var(--accent)'}}>Indicator</span></div>
+              <div className="logo-sub">EMA Touch · BTCUSDC · 15m</div>
+            </div>
+          </div>
+          <div className={`db-badge ${dbStatus?.connected ? 'connected' : 'disconnected'}`}>
+            <span className="db-dot" />
+            {dbStatus?.connected
+              ? `BD conectada · ${dbStatus.totalCandles?.toLocaleString()} velas`
+              : dbStatus?.error ?? 'Conectando...'}
+          </div>
+        </div>
+        <div className="strategy-nav">{navButtons}</div>
+      </header>
+
+      <div className="layout">
+        <aside className="sidebar">
+          <div className="sidebar-scroll">
+
+            <Section title="📅 Rango de fechas">
+              <InputGroup label="Desde">
+                <input type="date" value={params.dateFrom} onChange={e => set('dateFrom', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Hasta">
+                <input type="date" value={params.dateTo}   onChange={e => set('dateTo',   e.target.value)} />
+              </InputGroup>
+            </Section>
+
+            <Section title="📡 Configuración EMA">
+              <InputGroup label="Período EMA" tooltip="Número de velas para calcular la EMA de toque">
+                <input type="number" step="1" min="2" value={params.emaPeriod} onChange={e => int('emaPeriod', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="EMA tendencia lenta" tooltip="EMA lenta de contexto. SHORT solo si EMA toque < EMA lenta. LONG solo si EMA toque > EMA lenta. 0 = sin filtro.">
+                <input type="number" step="1" min="0" value={params.slowEmaPeriod} onChange={e => int('slowEmaPeriod', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Pendiente EMA (velas)" tooltip="Confirma pendiente de la EMA toque. SHORT solo si EMA[i] < EMA[i-N] (bajando). LONG solo si EMA[i] > EMA[i-N] (subiendo). 0 = sin filtro.">
+                <input type="number" step="1" min="0" value={params.emaSlopeLookback} onChange={e => int('emaSlopeLookback', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Consistencia lado EMA (velas)" tooltip="Mínimo de velas con cuerpo al otro lado de la EMA antes del cruce. Opera SOLO el primer toque tras cruzar. 0 = sin filtro.">
+                <input type="number" step="1" min="0" value={params.emaConsistencyBars} onChange={e => int('emaConsistencyBars', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Mecha mínima (%)" tooltip="% mínimo de mecha que debe tocar la EMA respecto al rango de la vela">
+                <input type="number" step="0.5" min="0" value={params.minWickPct} onChange={e => num('minWickPct', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Cuerpo máximo (% rango)" tooltip="Cuerpo |close-open| debe ser menor a este % del rango total de la vela. Filtra cuerpos disfrazados de mecha. 0 = sin filtro.">
+                <input type="number" step="5" min="0" max="100" value={params.maxBodyPct} onChange={e => num('maxBodyPct', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Dirección">
+                <select value={params.direction} onChange={e => set('direction', e.target.value)}
+                  style={{width:'100%', background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'var(--radius)', color:'var(--text)', padding:'7px 10px', fontFamily:'var(--font-mono)', fontSize:13}}>
+                  <option value="R">▼ Solo SHORT (resistencia)</option>
+                  <option value="S">▲ Solo LONG (soporte)</option>
+                  <option value="BOTH">⇅ Ambas (SHORT prioridad)</option>
+                </select>
+              </InputGroup>
+            </Section>
+
+            <Section title="📊 Filtros de calidad">
+              <InputGroup label="Cruce mín. cuerpo (%)" tooltip="Filtro C: la vela que cruza la EMA debe tener cuerpo ≥ este % del rango. Confirma que el cruce fue decisivo (bajista para SHORT, alcista para LONG). 0 = sin filtro.">
+                <input type="number" step="5" min="0" max="80" value={params.minCrossBodyPct} onChange={e => num('minCrossBodyPct', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="RSI período" tooltip="Filtro B: período del RSI de Wilder. 0 = sin filtro RSI.">
+                <input type="number" step="1" min="0" value={params.rsiPeriod} onChange={e => int('rsiPeriod', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="RSI máx. SHORT" tooltip="Filtro B: solo SHORT si RSI ≤ este valor. Evita entrar cuando el momentum alcista es demasiado fuerte y puede romper la EMA.">
+                <input type="number" step="1" min="40" max="90" value={params.rsiShortMax} onChange={e => int('rsiShortMax', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="RSI mín. LONG" tooltip="Filtro B: solo LONG si RSI ≥ este valor. Evita entrar cuando el momentum bajista es demasiado fuerte y puede romper la EMA.">
+                <input type="number" step="1" min="10" max="60" value={params.rsiLongMin} onChange={e => int('rsiLongMin', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Período ATR" tooltip="Filtro ATR: volatilidad. 0 = sin filtro ATR.">
+                <input type="number" step="1" min="0" value={params.atrPeriod} onChange={e => int('atrPeriod', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Período MA del ATR" tooltip="Media del ATR para comparar nivel de volatilidad actual.">
+                <input type="number" step="1" min="1" value={params.atrMaPeriod} onChange={e => int('atrMaPeriod', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Multiplicador máx. ATR" tooltip="Solo opera si ATR actual ≤ ATR_MA × este valor. 1.5 = permite 50% más de volatilidad que la media.">
+                <input type="number" step="0.1" min="0.5" value={params.atrMaxMultiplier} onChange={e => num('atrMaxMultiplier', e.target.value)} />
+              </InputGroup>
+            </Section>
+
+            <Section title="💰 TP / SL">
+              <InputGroup label="TP (%)">
+                <input type="number" step="0.05" min="0.01" value={params.tpPct}    onChange={e => num('tpPct',    e.target.value)} />
+              </InputGroup>
+              <InputGroup label="SL (%)">
+                <input type="number" step="0.05" min="0.01" value={params.slPct}    onChange={e => num('slPct',    e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Fee extra SL (%)">
+                <input type="number" step="0.01" min="0"    value={params.feeSlPct} onChange={e => num('feeSlPct', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Fee descontado TP (%)">
+                <input type="number" step="0.01" min="0"    value={params.feeTpPct} onChange={e => num('feeTpPct', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Apalancamiento">
+                <input type="number" step="1"    min="1"    value={params.leverage} onChange={e => num('leverage', e.target.value)} />
+              </InputGroup>
+            </Section>
+
+            <Section title="💵 Capital">
+              <InputGroup label="Capital inicial ($)">
+                <input type="number" step="100" min="1" value={params.initialCapital}      onChange={e => num('initialCapital',      e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Aporte mensual ($)">
+                <input type="number" step="10"  min="0" value={params.monthlyContribution} onChange={e => num('monthlyContribution', e.target.value)} />
+              </InputGroup>
+            </Section>
+
+            {/* ── Análisis Profundo ── */}
+            <div className="section">
+              <button
+                className="section-title collapsible"
+                style={{width:'100%', textAlign:'left', background:'none', border:'none', color:'var(--text)', cursor:'pointer', padding:0, display:'flex', justifyContent:'space-between'}}
+                onClick={() => { setOptimMode(v => !v); setMultiMode(false) }}
+              >
+                <span>🔬 Análisis Profundo</span>
+                <span style={{color:'var(--text-muted)', fontSize:11}}>{optimMode ? '▲' : '▼'}</span>
+              </button>
+              {optimMode && (
+                <div style={{marginTop:10, display:'flex', flexDirection:'column', gap:6}}>
+                  <div style={{fontSize:11, color:'var(--text-muted)', fontFamily:'var(--font-mono)', marginBottom:4}}>
+                    ~{estimatedCombos.toLocaleString()} combinaciones
+                  </div>
+
+                  {[
+                    ['emaPeriod',  'Período EMA',  1,    true],
+                    ['minWickPct', 'Mecha%',        0.5,  false],
+                    ['slPct',      'SL%',           0.05, false],
+                    ['tpPct',      'TP%',           0.05, false],
+                  ].map(([field, label, step, isInt]) => (
+                    <div key={field}>
+                      <div style={{fontSize:11, color:'var(--text-muted)', fontFamily:'var(--font-mono)', marginBottom:3}}>{label}</div>
+                      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:4}}>
+                        {['min','max','step'].map(k => (
+                          <input key={k} type="number" step={step} min={step}
+                            placeholder={k}
+                            value={optimRanges[field][k]}
+                            onChange={e => setOF(field, k, e.target.value)}
+                            style={{background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'var(--radius)', color:'var(--text)', padding:'5px 7px', fontFamily:'var(--font-mono)', fontSize:12, width:'100%'}}
+                            title={k}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* ── Multi-Combinaciones ── */}
+            <div className="section optim-section">
+              <div className="optim-section-header" onClick={() => { setMultiMode(v => !v); setOptimMode(false) }}>
+                <span className="section-title" style={{marginBottom:0, borderBottom:'none', paddingBottom:0}}>🎯 Multi-Combinaciones</span>
+                <span className="optim-chevron">{multiMode ? '▲' : '▼'}</span>
+              </div>
+              {multiMode && (
+                <div className="optim-body">
+                  <div style={{fontSize:11, color:'var(--text-muted)', marginBottom:8, lineHeight:1.5}}>
+                    Hasta 15 combos. Filtros de calidad y capital compartidos. 1 trade/día — dispara el primero.
+                  </div>
+                  {multiEmaCombo.map((combo, ci) => (
+                    <div key={ci} className="multi-combo-block">
+                      <div className="multi-combo-header">
+                        <span style={{fontSize:11, fontWeight:700, color:'var(--accent)', textTransform:'uppercase', letterSpacing:'0.06em'}}>
+                          Combo {ci + 1}
+                        </span>
+                        {multiEmaCombo.length > 1 && (
+                          <button className="multi-remove-btn" onClick={() => removeEmaCombo(ci)}>✕</button>
+                        )}
+                      </div>
+                      <div className="multi-combo-fields">
+                        <div className="multi-field">
+                          <label>EMA</label>
+                          <input type="number" step="1" min="2" value={combo.emaPeriod} onChange={e => updateEmaCombo(ci, 'emaPeriod', e.target.value)} />
+                        </div>
+                        <div className="multi-field">
+                          <label>Mecha%</label>
+                          <input type="number" step="0.5" min="0" value={combo.minWickPct} onChange={e => updateEmaCombo(ci, 'minWickPct', e.target.value)} />
+                        </div>
+                        <div className="multi-field">
+                          <label>SL%</label>
+                          <input type="number" step="0.05" min="0.01" value={combo.slPct} onChange={e => updateEmaCombo(ci, 'slPct', e.target.value)} />
+                        </div>
+                        <div className="multi-field">
+                          <label>TP%</label>
+                          <input type="number" step="0.05" min="0.01" value={combo.tpPct} onChange={e => updateEmaCombo(ci, 'tpPct', e.target.value)} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {multiEmaCombo.length < 15 && (
+                    <button
+                      className="run-btn optim-btn"
+                      style={{width:'100%', marginTop:4, padding:'8px', fontSize:12}}
+                      onClick={addEmaCombo}
+                    >
+                      + Agregar combo
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+          </div>
+
+          <div className="sidebar-footer">
+            {optimMode
+              ? <>
+                  <button className="run-btn optim-btn" onClick={handleOptimize} disabled={!dbStatus?.connected}>
+                    🔬 Abrir Análisis Profundo
+                  </button>
+                  <button className="run-btn optim-btn" style={{marginTop:'0.4rem'}}
+                    onClick={() => window.open(window.location.pathname + '?strategy=ema&mode=exceloptim', '_blank')}>
+                    📊 Análisis Multi-Combo Excel
+                  </button>
+                </>
+              : multiMode
+              ? <button className="run-btn" onClick={handleMultiRun} disabled={loading || !dbStatus?.connected}>
+                  {loading ? <><span className="spinner" /> Procesando...</> : `🎯 Ejecutar ${multiEmaCombo.length} Combos`}
+                </button>
+              : <button className="run-btn" onClick={handleRun} disabled={loading || !dbStatus?.connected}>
+                  {loading ? <><span className="spinner" /> Procesando...</> : '▶ Ejecutar Backtest'}
+                </button>
+            }
+            {error && <div className="error-box">⚠️ {error}</div>}
+          </div>
+        </aside>
+
+        {/* ── MAIN ── */}
+        <main className="main">
+          {!result && !loading && (
+            <div className="empty-state">
+              <div className="empty-icon">📡</div>
+              <div className="empty-title">EMA Touch</div>
+              <div className="empty-sub">
+                Señal cuando la mecha de la vela toca la EMA<br/>
+                manteniendo el cuerpo del lado contrario.<br/>
+                <strong>SHORT</strong>: mecha superior · <strong>LONG</strong>: mecha inferior · 1 trade/día
+              </div>
+            </div>
+          )}
+
+          {loading && (
+            <div className="empty-state">
+              <div className="loading-ring" />
+              <div className="empty-title">Analizando velas...</div>
+              <div className="empty-sub">Calculando EMA · detectando toques de mecha</div>
+            </div>
+          )}
+
+          {result && !loading && (
+            <>
+              <div className="result-header">
+                <div className="result-meta">
+                  <span>📊 {result.totalCandles.toLocaleString()} velas</span>
+                  <span>·</span>
+                  <span>{params.dateFrom} → {params.dateTo}</span>
+                  <span>·</span>
+                  <span>EMA {params.emaPeriod} · {params.direction === 'R' ? '▼ SHORT' : params.direction === 'S' ? '▲ LONG' : '⇅ Ambas'}</span>
+                </div>
+                <div className="tabs">
+                  <button className={activeTab === 'stats'   ? 'tab active' : 'tab'} onClick={() => setActiveTab('stats')}>Estadísticas</button>
+                  <button className={activeTab === 'trades'  ? 'tab active' : 'tab'} onClick={() => setActiveTab('trades')}>Trades ({result.trades.length})</button>
+                  <button className={activeTab === 'signals' ? 'tab active' : 'tab'} onClick={() => setActiveTab('signals')}>Señales ({result.signals.length})</button>
+                </div>
+              </div>
+
+              {activeTab === 'stats' && (
+                <>
+                  <div className="stats-grid">
+                    <StatCard label="Trades cerrados"                      value={stats.totalClosed}    variant="neutral" />
+                    <StatCard label="TP ✅"                                 value={stats.totalTp}        variant="win" />
+                    <StatCard label="SL ❌"                                 value={stats.totalSl}        variant="loss" />
+                    <StatCard label="Win Rate"                              value={`${stats.winRate}%`}  variant={winRate >= 50 ? 'win' : 'loss'} />
+                    <StatCard label={`Ganancia acum. x${params.leverage}`} value={`${stats.totalProfitPct}%`} variant="win" />
+                    <StatCard label={`Pérdida acum. x${params.leverage}`}  value={`${stats.totalLossPct}%`}  variant="loss" />
+                    <StatCard label={`Neto x${params.leverage}`}           value={`${stats.totalNetPct}%`}   variant={netPct >= 0 ? 'win' : 'loss'} />
+                    <StatCard label="Máx. Drawdown"                        value={`${stats.maxDrawdownPct}%`} variant="warn" />
+                    <StatCard label="Capital simple"    value={`$${parseFloat(stats.simpleCapital).toLocaleString('es-CO',{minimumFractionDigits:2})}`}   variant="neutral" />
+                    <StatCard label="Capital compuesto" value={`$${parseFloat(stats.compoundCapital).toLocaleString('es-CO',{minimumFractionDigits:2})}`} variant="accent" />
+                    <StatCard label="Mejor método"                         value={stats.bestMethod}     variant="accent" />
+                    {!result.isMulti && <StatCard label={`TP efectivo x${params.leverage}`} value={`${stats.effectiveTpPct}%`} variant="neutral" />}
+                    {!result.isMulti && <StatCard label={`SL efectivo x${params.leverage}`} value={`${stats.effectiveSlPct}%`} variant="neutral" />}
+                    {result.isMulti  && <StatCard label="Combos activos" value={multiEmaCombo.length} variant="neutral" />}
+                  </div>
+
+                  {result.trades.length > 0 && (() => {
+                    const effTp = parseFloat(stats.effectiveTpPct ?? 0)
+                    const effSl = parseFloat(stats.effectiveSlPct ?? 0)
+                    const { byYear, byMonth, byCombo } = computePeriodStats(result.trades, effTp, effSl)
+                    return <>
+                      {result.isMulti && <PeriodTable title="🎯 Acumulado por combo" rows={byCombo} />}
+                      <PeriodTable title="📅 Acumulado por año" rows={byYear}  />
+                      <PeriodTable title="📆 Acumulado por mes" rows={byMonth} />
+                    </>
+                  })()}
+                </>
+              )}
+
+              {activeTab === 'trades' && (
+                <div className="table-wrap">
+                  {result.trades.length === 0
+                    ? <div className="empty-table">No se cerraron trades en este período</div>
+                    : (
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>#</th><th>Lado</th>{result.isMulti && <th>Combo</th>}<th>Apertura</th><th>Entrada</th>
+                            <th>EMA</th><th>Mecha%</th>
+                            <th>TP</th><th>SL</th><th>Cierre</th><th>Resultado</th>
+                            <th>Capital entrada</th><th>Capital salida</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {result.trades.map((t, i) => (
+                            <tr key={i} className={t.result === 'TP' ? 'row-win' : 'row-loss'}>
+                              <td>{i + 1}</td>
+                              <td><span className={`badge badge-${t.tipo === 'S' ? 'tp' : 'sl'}`}>{t.tipo === 'S' ? '▲ LONG' : '▼ SHORT'}</span></td>
+                              {result.isMulti && <td style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--accent)'}}>{t.comboLabel}</td>}
+                              <td style={{fontFamily:'var(--font-mono)',fontSize:11}}>{new Date(t.entryTime).toLocaleString('es-CO',{timeZone:'UTC'})}</td>
+                              <td style={{fontFamily:'var(--font-mono)'}}>${parseFloat(t.price).toLocaleString('en-US')}</td>
+                              <td style={{fontFamily:'var(--font-mono)',color:'var(--accent)'}}>${parseFloat(t.emaVal).toLocaleString('en-US')}</td>
+                              <td style={{fontFamily:'var(--font-mono)'}}>{t.wickPct}%</td>
+                              <td className="tp-cell" style={{fontFamily:'var(--font-mono)'}}>${parseFloat(t.tp).toLocaleString('en-US')}</td>
+                              <td className="sl-cell" style={{fontFamily:'var(--font-mono)'}}>${parseFloat(t.sl).toLocaleString('en-US')}</td>
+                              <td style={{fontFamily:'var(--font-mono)',fontSize:11}}>{new Date(t.closeTime).toLocaleString('es-CO',{timeZone:'UTC'})}</td>
+                              <td><span className={`badge badge-${t.result.toLowerCase()}`}>{t.result === 'TP' ? '✅ TP' : '❌ SL'}</span></td>
+                              <td>${parseFloat(t.capitalAtEntry).toLocaleString('es-CO',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                              <td className={t.result === 'TP' ? 'tp-cell' : 'sl-cell'}>${parseFloat(t.capitalAtExit).toLocaleString('es-CO',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )
+                  }
+                </div>
+              )}
+
+              {activeTab === 'signals' && (
+                <div className="table-wrap">
+                  {result.signals.length === 0
+                    ? <div className="empty-table">No se generaron señales en este período</div>
+                    : (
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>#</th><th>Fecha</th><th>Lado</th><th>Precio</th><th>EMA</th><th>Mecha%</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {result.signals.map((s, i) => (
+                            <tr key={i}>
+                              <td>{i + 1}</td>
+                              <td style={{fontFamily:'var(--font-mono)',fontSize:11}}>{new Date(s.time).toLocaleString('es-CO',{timeZone:'UTC'})}</td>
+                              <td><span className={`badge badge-${s.tipo === 'S' ? 'tp' : 'sl'}`}>{s.tipo === 'S' ? '▲ LONG' : '▼ SHORT'}</span></td>
+                              <td style={{fontFamily:'var(--font-mono)'}}>${parseFloat(s.price).toLocaleString('en-US')}</td>
+                              <td style={{fontFamily:'var(--font-mono)',color:'var(--accent)'}}>${parseFloat(s.emaVal).toLocaleString('en-US')}</td>
+                              <td style={{fontFamily:'var(--font-mono)'}}>{s.wickPct}%</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )
+                  }
+                </div>
+              )}
+            </>
+          )}
+        </main>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
+  if (isEmaExcelOptimMode)     return <EmaExcelOptimView />
+  if (isEmaOptimMode)          return <EmaOptimView />
   if (isSoporteOptimMode)      return <SoporteOptimView />
   if (isSoporteExcelOptimMode) return <SoporteExcelOptimView />
   if (isPinBarOptimMode)       return <PinBarOptimView />
@@ -5999,6 +7282,7 @@ export default function App() {
   if (isMultiOptimMode)        return <MultiOptimView />
   if (isExcelOptimMode)        return <ExcelOptimView />
   if (isPortfolioMode)         return <RangoResistenciaPortfolioView />
+  if (isEmaMode)               return <EmaView />
   if (isSoporteMode)           return <SoporteView />
   if (isPinBarMode)            return <PinBarView />
   if (isEmaPullbackMode)       return <EmaPullbackView />

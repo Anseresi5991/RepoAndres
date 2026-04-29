@@ -186,19 +186,11 @@ self.onmessage = function (e) {
 
                   const signal = touchTop && !dailySignalUsed && isBearish[i]
 
-                  // Cerrar trades abiertos
+                  // Cerrar trades abiertos — SL tiene prioridad (conservador)
                   const stillOpen = []
                   for (let t = 0; t < openTrades.length; t++) {
                     const tr = openTrades[t]
-                    if (low <= tr.tp) {
-                      totalTp++; totalClosed++
-                      profitPct += effTp
-                      equityPct += effTp
-                      if (equityPct > equityPeak) equityPeak = equityPct
-                      const dd = equityPeak - equityPct
-                      if (dd > maxDd) maxDd = dd
-                      capital *= (1 + effTp / 100)
-                    } else if (high >= tr.sl) {
+                    if (high >= tr.sl) {
                       totalSl++; totalClosed++
                       lossPct  += effSl
                       equityPct -= effSl
@@ -206,6 +198,14 @@ self.onmessage = function (e) {
                       const dd = equityPeak - equityPct
                       if (dd > maxDd) maxDd = dd
                       capital *= (1 - effSl / 100)
+                    } else if (low <= tr.tp) {
+                      totalTp++; totalClosed++
+                      profitPct += effTp
+                      equityPct += effTp
+                      if (equityPct > equityPeak) equityPeak = equityPct
+                      const dd = equityPeak - equityPct
+                      if (dd > maxDd) maxDd = dd
+                      capital *= (1 + effTp / 100)
                     } else {
                       stillOpen.push(tr)
                     }

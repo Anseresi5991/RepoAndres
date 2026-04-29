@@ -1,5 +1,5 @@
 //@version=5
-indicator("12 Combos BTC Rango Dinámico + Solo Resistencias", overlay=true)
+indicator("13 Combos BTC Rango Dinámico + Solo Resistencias", overlay=true)
 
 // --- 1. CONFIGURACIÓN DEL RANGO — COMBO 1 (principal) ---
 grp_params = "Combo 1 — Configuración del Rango"
@@ -123,6 +123,16 @@ lookback12   = input.int(20,     "Velas lookback",   minval=1,               gro
 min_wick12   = input.float(15.0, "Mecha mínima (%)", minval=0.1, step=0.1,  group=grp_c12)
 sl_pct12     = input.float(0.5,  "SL (%)",           minval=0.01, step=0.01, group=grp_c12)
 tp_pct12     = input.float(0.15, "TP (%)",           minval=0.01, step=0.01, group=grp_c12)
+
+// --- 13. COMBO 13 (opcional) ---
+grp_c13      = "Combo 13 (opcional)"
+use_combo13  = input.bool(false, "Activar Combo 13", group=grp_c13)
+min_range13  = input.float(0.6,  "Mínimo (%)",       minval=0.1, step=0.1,  group=grp_c13)
+max_range13  = input.float(1.2,  "Máximo (%)",       minval=0.1, step=0.1,  group=grp_c13)
+lookback13   = input.int(20,     "Velas lookback",   minval=1,               group=grp_c13)
+min_wick13   = input.float(15.0, "Mecha mínima (%)", minval=0.1, step=0.1,  group=grp_c13)
+sl_pct13     = input.float(0.5,  "SL (%)",           minval=0.01, step=0.01, group=grp_c13)
+tp_pct13     = input.float(0.15, "TP (%)",           minval=0.01, step=0.01, group=grp_c13)
 
 
 // --- 9. CONFIGURACIÓN HORARIA ---
@@ -460,9 +470,32 @@ if not is_tight12
 
 touch_range_top12 = is_tight12 and not first_touch_done12 and not na(active_range_top12) and high >= active_range_top12 and candle_range > 0 and upper_wick_pct >= min_wick12
 
+// =============================================================================
+// MÁQUINA DE ESTADOS — COMBO 13
+// =============================================================================
+highest13      = ta.highest(high, lookback13)
+lowest13       = ta.lowest(low,  lookback13)
+range_pct13    = close != 0 ? ((highest13 - lowest13) / close) * 100 : 0.0
+
+is_tight13     = use_combo13 and min_range13 <= max_range13 and is_allowed_time and range_pct13 >= min_range13 and range_pct13 <= max_range13
+new_range13    = is_tight13 and not is_tight13[1]
+
+var float active_range_top13      = na
+var bool  first_touch_done13      = false
+
+if new_range13
+    active_range_top13 := highest13
+    first_touch_done13 := false
+
+if not is_tight13
+    active_range_top13 := na
+    first_touch_done13 := false
+
+touch_range_top13 = is_tight13 and not first_touch_done13 and not na(active_range_top13) and high >= active_range_top13 and candle_range > 0 and upper_wick_pct >= min_wick13
+
 
 // =============================================================================
-// SEÑALES CON PRIORIDAD: C1 > C2 > … > C12 — máximo 1 trade por día (UTC)
+// SEÑALES CON PRIORIDAD: C1 > C2 > … > C13 — máximo 1 trade por día (UTC)
 // Todos evalúan el mismo can_fire_now antes de que se actualice daily_signal_used
 // =============================================================================
 new_day_utc = ta.change(time("D", "0000-0000", "UTC")) != 0
@@ -486,10 +519,11 @@ final_signal_9  = touch_range_top9  and can_fire_now and is_bearish_trend and no
 final_signal_10 = touch_range_top10 and can_fire_now and is_bearish_trend and not final_signal_1 and not final_signal_2 and not final_signal_3 and not final_signal_4 and not final_signal_5 and not final_signal_6 and not final_signal_7 and not final_signal_8 and not final_signal_9
 final_signal_11 = touch_range_top11 and can_fire_now and is_bearish_trend and not final_signal_1 and not final_signal_2 and not final_signal_3 and not final_signal_4 and not final_signal_5 and not final_signal_6 and not final_signal_7 and not final_signal_8 and not final_signal_9 and not final_signal_10
 final_signal_12 = touch_range_top12 and can_fire_now and is_bearish_trend and not final_signal_1 and not final_signal_2 and not final_signal_3 and not final_signal_4 and not final_signal_5 and not final_signal_6 and not final_signal_7 and not final_signal_8 and not final_signal_9 and not final_signal_10 and not final_signal_11
+final_signal_13 = touch_range_top13 and can_fire_now and is_bearish_trend and not final_signal_1 and not final_signal_2 and not final_signal_3 and not final_signal_4 and not final_signal_5 and not final_signal_6 and not final_signal_7 and not final_signal_8 and not final_signal_9 and not final_signal_10 and not final_signal_11 and not final_signal_12
 
 // alias para compatibilidad con alertcondition y plotshape originales
 final_resistance_signal = final_signal_1
-final_any_signal = final_signal_1 or final_signal_2 or final_signal_3 or final_signal_4 or final_signal_5 or final_signal_6 or final_signal_7 or final_signal_8 or final_signal_9 or final_signal_10 or final_signal_11 or final_signal_12
+final_any_signal = final_signal_1 or final_signal_2 or final_signal_3 or final_signal_4 or final_signal_5 or final_signal_6 or final_signal_7 or final_signal_8 or final_signal_9 or final_signal_10 or final_signal_11 or final_signal_12 or final_signal_13
 
 if final_any_signal
     daily_signal_used := true
@@ -519,6 +553,8 @@ if final_signal_11
     first_touch_done11 := true
 if final_signal_12
     first_touch_done12 := true
+if final_signal_13
+    first_touch_done13 := true
 
 // =============================================================================
 // TRADE — estado único (Pine Script solo puede trazar 1 trade a la vez)
@@ -544,6 +580,7 @@ var bool opened_c9  = false
 var bool opened_c10 = false
 var bool opened_c11 = false
 var bool opened_c12 = false
+var bool opened_c13 = false
 opened_c1  := false
 opened_c2  := false
 opened_c3  := false
@@ -556,6 +593,7 @@ opened_c9  := false
 opened_c10 := false
 opened_c11 := false
 opened_c12 := false
+opened_c13 := false
 
 // Guardar effective pct del combo que abrió (varía según SL%/TP% del combo)
 var float trade_eff_tp_pct = 0.0
@@ -695,6 +733,17 @@ if final_signal_12 and not trade_open
     trade_result       := "Abierto (C12)"
     opened_c12         := true
 
+if final_signal_13 and not trade_open
+    entry_price        := close
+    stop_loss_price    := entry_price * (1 + sl_pct13 / 100)
+    take_profit_price  := entry_price * (1 - tp_pct13 / 100)
+    trade_eff_tp_pct   := math.max(tp_pct13 - fee_tp_pct, 0) * leverage
+    trade_eff_sl_pct   := (sl_pct13 + fee_sl_pct) * leverage
+    trade_open         := true
+    entry_bar          := bar_index
+    trade_result       := "Abierto (C13)"
+    opened_c13         := true
+
 // TP/SL solo se evalúan desde la vela SIGUIENTE a la entrada (usando bar_index != entry_bar)
 tp_hit = trade_open and not na(take_profit_price) and low  <= take_profit_price and bar_index != entry_bar
 sl_hit = trade_open and not na(stop_loss_price)  and high >= stop_loss_price   and bar_index != entry_bar
@@ -773,6 +822,7 @@ plot(show_range_lines and is_tight9 ? active_range_top9 : na, "Techo C9", color=
 plot(show_range_lines and is_tight10 ? active_range_top10 : na, "Techo C10", color=color.new(color.silver, 0),            linewidth=1, style=plot.style_linebr)
 plot(show_range_lines and is_tight11 ? active_range_top11 : na, "Techo C11", color=color.new(color.navy,   0),            linewidth=1, style=plot.style_linebr)
 plot(show_range_lines and is_tight12 ? active_range_top12 : na, "Techo C12", color=color.new(color.olive,  0),            linewidth=1, style=plot.style_linebr)
+plot(show_range_lines and is_tight13 ? active_range_top13 : na, "Techo C13", color=color.new(color.gray,   0),            linewidth=1, style=plot.style_linebr)
 
 plot(show_levels and res1 > 0 ? res1 : na, "R1", color=color.red, style=plot.style_linebr)
 plot(show_levels and res2 > 0 ? res2 : na, "R2", color=color.red, style=plot.style_linebr)
@@ -791,6 +841,7 @@ plotshape(show_signal_marks and opened_c9,  title="Señal C9",  style=shape.labe
 plotshape(show_signal_marks and opened_c10, title="Señal C10", style=shape.labeldown, location=location.abovebar, color=color.new(color.silver,  0), textcolor=color.black, size=size.tiny, text="C10")
 plotshape(show_signal_marks and opened_c11, title="Señal C11", style=shape.labeldown, location=location.abovebar, color=color.new(color.navy,    0), textcolor=color.white, size=size.tiny, text="C11")
 plotshape(show_signal_marks and opened_c12, title="Señal C12", style=shape.labeldown, location=location.abovebar, color=color.new(color.olive,   0), textcolor=color.white, size=size.tiny, text="C12")
+plotshape(show_signal_marks and opened_c13, title="Señal C13", style=shape.labeldown, location=location.abovebar, color=color.new(color.gray,    0), textcolor=color.white, size=size.tiny, text="C13")
 
 plot(show_trade_lines and not na(entry_price)      ? entry_price      : na, "Entrada SHORT", color=color.yellow, linewidth=2, style=plot.style_linebr)
 plot(show_trade_lines and not na(stop_loss_price)  ? stop_loss_price  : na, "Stop Loss",     color=color.red,    linewidth=2, style=plot.style_linebr)
@@ -802,7 +853,7 @@ plotshape(sl_hit, title="SL alcanzado", style=shape.labeldown, location=location
 // =============================================================================
 // TABLAS
 // =============================================================================
-combos_active = 1 + (use_combo2 ? 1 : 0) + (use_combo3 ? 1 : 0) + (use_combo4 ? 1 : 0) + (use_combo5 ? 1 : 0) + (use_combo6 ? 1 : 0) + (use_combo7 ? 1 : 0) + (use_combo8 ? 1 : 0) + (use_combo9 ? 1 : 0) + (use_combo10 ? 1 : 0) + (use_combo11 ? 1 : 0) + (use_combo12 ? 1 : 0)
+combos_active = 1 + (use_combo2 ? 1 : 0) + (use_combo3 ? 1 : 0) + (use_combo4 ? 1 : 0) + (use_combo5 ? 1 : 0) + (use_combo6 ? 1 : 0) + (use_combo7 ? 1 : 0) + (use_combo8 ? 1 : 0) + (use_combo9 ? 1 : 0) + (use_combo10 ? 1 : 0) + (use_combo11 ? 1 : 0) + (use_combo12 ? 1 : 0) + (use_combo13 ? 1 : 0)
 
 var table info_panel  = table.new(position.bottom_right, 2, 11, bgcolor=color.new(color.black, 60))
 var table stats_panel = table.new(position.top_center,   2, 11, bgcolor=color.new(color.black, 60))
@@ -822,6 +873,7 @@ if barstate.islast
          final_signal_10 ? "C10 — señal del día ⚪" :
          final_signal_11 ? "C11 — señal del día 🌑" :
          final_signal_12 ? "C12 — señal del día 🫒" :
+         final_signal_13 ? "C13 — señal del día ⚫" :
          resistance_alert ? "Toque R manual 🔴" :
          "Sin señal"
 
@@ -902,6 +954,7 @@ if barstate.islast
 // ALERTAS
 // =============================================================================
 grp_accounts = "Subcuentas por cantidad de combos"
+account_13 = input.string("ESTRATEGIA_13", "Account con 13 combos", group=grp_accounts)
 account_12 = input.string("ESTRATEGIA_12", "Account con 12 combos", group=grp_accounts)
 account_11 = input.string("ESTRATEGIA_11", "Account con 11 combos", group=grp_accounts)
 account_10 = input.string("ESTRATEGIA_10", "Account con 10 combos", group=grp_accounts)
@@ -930,10 +983,12 @@ alertcondition(final_signal_9,    "Señal C9 — R única por día",            
 alertcondition(final_signal_10,   "Señal C10 — R única por día",                "Combo 10 disparó la primera señal de resistencia válida del día")
 alertcondition(final_signal_11,   "Señal C11 — R única por día",                "Combo 11 disparó la primera señal de resistencia válida del día")
 alertcondition(final_signal_12,   "Señal C12 — R única por día",                "Combo 12 disparó la primera señal de resistencia válida del día")
+alertcondition(final_signal_13,   "Señal C13 — R única por día",                "Combo 13 disparó la primera señal de resistencia válida del día")
 alertcondition(tp_hit,            "TP alcanzado",                               "El precio alcanzó el Take Profit de la operación SHORT")
 alertcondition(sl_hit,            "SL alcanzado",                               "El precio alcanzó el Stop Loss de la operación SHORT")
 
 active_account =
+     combos_active == 13 ? account_13 :
      combos_active == 12 ? account_12 :
      combos_active == 11 ? account_11 :
      combos_active == 10 ? account_10 :
@@ -948,6 +1003,6 @@ active_account =
                            account_1
 // Alerta dinámica JSON → webhook
 if final_any_signal
-    _tp = final_signal_1 ? tp_pct : final_signal_2 ? tp_pct2 : final_signal_3 ? tp_pct3 : final_signal_4 ? tp_pct4 : final_signal_5 ? tp_pct5 : final_signal_6 ? tp_pct6 : final_signal_7 ? tp_pct7 : final_signal_8 ? tp_pct8 : final_signal_9 ? tp_pct9 : final_signal_10 ? tp_pct10 : final_signal_11 ? tp_pct11 : tp_pct12
-    _sl = final_signal_1 ? sl_pct : final_signal_2 ? sl_pct2 : final_signal_3 ? sl_pct3 : final_signal_4 ? sl_pct4 : final_signal_5 ? sl_pct5 : final_signal_6 ? sl_pct6 : final_signal_7 ? sl_pct7 : final_signal_8 ? sl_pct8 : final_signal_9 ? sl_pct9 : final_signal_10 ? sl_pct10 : final_signal_11 ? sl_pct11 : sl_pct12
+    _tp = final_signal_1 ? tp_pct : final_signal_2 ? tp_pct2 : final_signal_3 ? tp_pct3 : final_signal_4 ? tp_pct4 : final_signal_5 ? tp_pct5 : final_signal_6 ? tp_pct6 : final_signal_7 ? tp_pct7 : final_signal_8 ? tp_pct8 : final_signal_9 ? tp_pct9 : final_signal_10 ? tp_pct10 : final_signal_11 ? tp_pct11 : final_signal_12 ? tp_pct12 : tp_pct13
+    _sl = final_signal_1 ? sl_pct : final_signal_2 ? sl_pct2 : final_signal_3 ? sl_pct3 : final_signal_4 ? sl_pct4 : final_signal_5 ? sl_pct5 : final_signal_6 ? sl_pct6 : final_signal_7 ? sl_pct7 : final_signal_8 ? sl_pct8 : final_signal_9 ? sl_pct9 : final_signal_10 ? sl_pct10 : final_signal_11 ? sl_pct11 : final_signal_12 ? sl_pct12 : sl_pct13
     alert('{"secret":"TestAndres","account":"' + active_account + '","tipo":"R","tp":' + str.tostring(_tp) + ',"sl":' + str.tostring(_sl) + '}', alert.freq_once_per_bar_close)

@@ -1,0 +1,1408 @@
+//@version=5
+indicator("13 Combos EMA Touch", overlay=true, max_labels_count=500)
+
+// ═══════════════════════════════════════════════════════════════
+// PARÁMETROS COMPARTIDOS
+// ═══════════════════════════════════════════════════════════════
+grp_shared         = "Parámetros Compartidos EMA Touch"
+slow_ema_per       = input.int(200,  "Período EMA Lenta",        minval=2,   group=grp_shared, tooltip="EMA lenta para filtro de tendencia")
+use_slow_filter    = input.bool(true,"Filtro EMA Lenta activo",  group=grp_shared, tooltip="Si activo: SHORT requiere EMA combo < EMA lenta. LONG requiere EMA combo > EMA lenta")
+ema_slope_lb       = input.int(5,    "Pendiente EMA (velas)",    minval=1,   group=grp_shared, tooltip="Velas atrás para medir pendiente de la EMA de cada combo")
+use_slope_filter   = input.bool(true,"Filtro pendiente activo",  group=grp_shared, tooltip="Si activo: SHORT requiere EMA bajando, LONG requiere EMA subiendo")
+max_body_pct       = input.float(50.0,"Cuerpo máx. vela (%)",   minval=0.0, step=1.0,  group=grp_shared, tooltip="0 = sin filtro. % máx del cuerpo en la vela señal")
+consistency_bars   = input.int(3,    "Velas consistencia EMA",  minval=1,   group=grp_shared, tooltip="Mínimo de velas con cuerpo del mismo lado antes de cruzar la EMA")
+min_cross_body_pct = input.float(30.0,"Cuerpo cruce mín. (%)",  minval=0.0, step=1.0,  group=grp_shared, tooltip="0 = sin filtro. % mín del cuerpo en la vela que cruza la EMA")
+direction_input    = input.string("BOTH","Dirección",            options=["BOTH","SHORT","LONG"], group=grp_shared, tooltip="BOTH: SHORT tiene prioridad sobre LONG dentro de cada combo")
+
+// ── Combo 1 ──────────────────────────────────────────────────
+grp_c1    = "Combo 1"
+ema_per1  = input.int(20,    "Período EMA",      minval=2,    group=grp_c1)
+min_wick1 = input.float(15.0,"Mecha mínima (%)", minval=0.1,  step=0.1,  group=grp_c1)
+sl_pct1   = input.float(0.5, "SL (%)",           minval=0.01, step=0.01, group=grp_c1)
+tp_pct1   = input.float(0.15,"TP (%)",           minval=0.01, step=0.01, group=grp_c1)
+
+var float simple_capital = na
+
+// ── Combo 2 ──────────────────────────────────────────────────
+grp_c2    = "Combo 2 (opcional)"
+use_c2    = input.bool(false,"Activar Combo 2",  group=grp_c2)
+ema_per2  = input.int(20,    "Período EMA",      minval=2,    group=grp_c2)
+min_wick2 = input.float(15.0,"Mecha mínima (%)", minval=0.1,  step=0.1,  group=grp_c2)
+sl_pct2   = input.float(0.5, "SL (%)",           minval=0.01, step=0.01, group=grp_c2)
+tp_pct2   = input.float(0.15,"TP (%)",           minval=0.01, step=0.01, group=grp_c2)
+
+// ── Combo 3 ──────────────────────────────────────────────────
+grp_c3    = "Combo 3 (opcional)"
+use_c3    = input.bool(false,"Activar Combo 3",  group=grp_c3)
+ema_per3  = input.int(20,    "Período EMA",      minval=2,    group=grp_c3)
+min_wick3 = input.float(15.0,"Mecha mínima (%)", minval=0.1,  step=0.1,  group=grp_c3)
+sl_pct3   = input.float(0.5, "SL (%)",           minval=0.01, step=0.01, group=grp_c3)
+tp_pct3   = input.float(0.15,"TP (%)",           minval=0.01, step=0.01, group=grp_c3)
+
+// ── Combo 4 ──────────────────────────────────────────────────
+grp_c4    = "Combo 4 (opcional)"
+use_c4    = input.bool(false,"Activar Combo 4",  group=grp_c4)
+ema_per4  = input.int(20,    "Período EMA",      minval=2,    group=grp_c4)
+min_wick4 = input.float(15.0,"Mecha mínima (%)", minval=0.1,  step=0.1,  group=grp_c4)
+sl_pct4   = input.float(0.5, "SL (%)",           minval=0.01, step=0.01, group=grp_c4)
+tp_pct4   = input.float(0.15,"TP (%)",           minval=0.01, step=0.01, group=grp_c4)
+
+// ── Combo 5 ──────────────────────────────────────────────────
+grp_c5    = "Combo 5 (opcional)"
+use_c5    = input.bool(false,"Activar Combo 5",  group=grp_c5)
+ema_per5  = input.int(20,    "Período EMA",      minval=2,    group=grp_c5)
+min_wick5 = input.float(15.0,"Mecha mínima (%)", minval=0.1,  step=0.1,  group=grp_c5)
+sl_pct5   = input.float(0.5, "SL (%)",           minval=0.01, step=0.01, group=grp_c5)
+tp_pct5   = input.float(0.15,"TP (%)",           minval=0.01, step=0.01, group=grp_c5)
+
+// ── Combo 6 ──────────────────────────────────────────────────
+grp_c6    = "Combo 6 (opcional)"
+use_c6    = input.bool(false,"Activar Combo 6",  group=grp_c6)
+ema_per6  = input.int(20,    "Período EMA",      minval=2,    group=grp_c6)
+min_wick6 = input.float(15.0,"Mecha mínima (%)", minval=0.1,  step=0.1,  group=grp_c6)
+sl_pct6   = input.float(0.5, "SL (%)",           minval=0.01, step=0.01, group=grp_c6)
+tp_pct6   = input.float(0.15,"TP (%)",           minval=0.01, step=0.01, group=grp_c6)
+
+// ── Combo 7 ──────────────────────────────────────────────────
+grp_c7    = "Combo 7 (opcional)"
+use_c7    = input.bool(false,"Activar Combo 7",  group=grp_c7)
+ema_per7  = input.int(20,    "Período EMA",      minval=2,    group=grp_c7)
+min_wick7 = input.float(15.0,"Mecha mínima (%)", minval=0.1,  step=0.1,  group=grp_c7)
+sl_pct7   = input.float(0.5, "SL (%)",           minval=0.01, step=0.01, group=grp_c7)
+tp_pct7   = input.float(0.15,"TP (%)",           minval=0.01, step=0.01, group=grp_c7)
+
+// ── Combo 8 ──────────────────────────────────────────────────
+grp_c8    = "Combo 8 (opcional)"
+use_c8    = input.bool(false,"Activar Combo 8",  group=grp_c8)
+ema_per8  = input.int(20,    "Período EMA",      minval=2,    group=grp_c8)
+min_wick8 = input.float(15.0,"Mecha mínima (%)", minval=0.1,  step=0.1,  group=grp_c8)
+sl_pct8   = input.float(0.5, "SL (%)",           minval=0.01, step=0.01, group=grp_c8)
+tp_pct8   = input.float(0.15,"TP (%)",           minval=0.01, step=0.01, group=grp_c8)
+
+// ── Combo 9 ──────────────────────────────────────────────────
+grp_c9    = "Combo 9 (opcional)"
+use_c9    = input.bool(false,"Activar Combo 9",  group=grp_c9)
+ema_per9  = input.int(20,    "Período EMA",      minval=2,    group=grp_c9)
+min_wick9 = input.float(15.0,"Mecha mínima (%)", minval=0.1,  step=0.1,  group=grp_c9)
+sl_pct9   = input.float(0.5, "SL (%)",           minval=0.01, step=0.01, group=grp_c9)
+tp_pct9   = input.float(0.15,"TP (%)",           minval=0.01, step=0.01, group=grp_c9)
+
+// ── Combo 10 ─────────────────────────────────────────────────
+grp_c10    = "Combo 10 (opcional)"
+use_c10    = input.bool(false,"Activar Combo 10", group=grp_c10)
+ema_per10  = input.int(20,    "Período EMA",      minval=2,    group=grp_c10)
+min_wick10 = input.float(15.0,"Mecha mínima (%)", minval=0.1,  step=0.1,  group=grp_c10)
+sl_pct10   = input.float(0.5, "SL (%)",           minval=0.01, step=0.01, group=grp_c10)
+tp_pct10   = input.float(0.15,"TP (%)",           minval=0.01, step=0.01, group=grp_c10)
+
+// ── Combo 11 ─────────────────────────────────────────────────
+grp_c11    = "Combo 11 (opcional)"
+use_c11    = input.bool(false,"Activar Combo 11", group=grp_c11)
+ema_per11  = input.int(20,    "Período EMA",      minval=2,    group=grp_c11)
+min_wick11 = input.float(15.0,"Mecha mínima (%)", minval=0.1,  step=0.1,  group=grp_c11)
+sl_pct11   = input.float(0.5, "SL (%)",           minval=0.01, step=0.01, group=grp_c11)
+tp_pct11   = input.float(0.15,"TP (%)",           minval=0.01, step=0.01, group=grp_c11)
+
+// ── Combo 12 ─────────────────────────────────────────────────
+grp_c12    = "Combo 12 (opcional)"
+use_c12    = input.bool(false,"Activar Combo 12", group=grp_c12)
+ema_per12  = input.int(20,    "Período EMA",      minval=2,    group=grp_c12)
+min_wick12 = input.float(15.0,"Mecha mínima (%)", minval=0.1,  step=0.1,  group=grp_c12)
+sl_pct12   = input.float(0.5, "SL (%)",           minval=0.01, step=0.01, group=grp_c12)
+tp_pct12   = input.float(0.15,"TP (%)",           minval=0.01, step=0.01, group=grp_c12)
+
+// ── Combo 13 ─────────────────────────────────────────────────
+grp_c13    = "Combo 13 (opcional)"
+use_c13    = input.bool(false,"Activar Combo 13", group=grp_c13)
+ema_per13  = input.int(20,    "Período EMA",      minval=2,    group=grp_c13)
+min_wick13 = input.float(15.0,"Mecha mínima (%)", minval=0.1,  step=0.1,  group=grp_c13)
+sl_pct13   = input.float(0.5, "SL (%)",           minval=0.01, step=0.01, group=grp_c13)
+tp_pct13   = input.float(0.15,"TP (%)",           minval=0.01, step=0.01, group=grp_c13)
+
+// ── Fees, apalancamiento, capital ────────────────────────────
+grp_stats       = "Estadísticas"
+fee_sl_pct      = input.float(0.10,   "Fee extra SL (%)",     minval=0.0, step=0.01,  group=grp_stats)
+fee_tp_pct      = input.float(0.05,   "Fee descontado TP (%)",minval=0.0, step=0.01,  group=grp_stats)
+leverage        = input.float(10.0,   "Apalancamiento",       minval=1.0, step=1.0,   group=grp_stats)
+initial_capital = input.float(1000.0, "Capital inicial",      minval=1.0, step=100.0, group=grp_stats)
+
+// ── Apariencia ───────────────────────────────────────────────
+grp_visual        = "Apariencia"
+show_ema_lines    = input.bool(true, "Mostrar líneas EMA",      group=grp_visual)
+show_signal_marks = input.bool(true, "Mostrar marcas de señal", group=grp_visual)
+show_trade_lines  = input.bool(true, "Mostrar líneas TP/SL",    group=grp_visual)
+
+// ── Subcuentas ───────────────────────────────────────────────
+grp_accounts = "Subcuentas por cantidad de combos"
+account_13 = input.string("EMA_TOUCH_13", "Account 13 combos", group=grp_accounts)
+account_12 = input.string("EMA_TOUCH_12", "Account 12 combos", group=grp_accounts)
+account_11 = input.string("EMA_TOUCH_11", "Account 11 combos", group=grp_accounts)
+account_10 = input.string("EMA_TOUCH_10", "Account 10 combos", group=grp_accounts)
+account_9  = input.string("EMA_TOUCH_9",  "Account 9 combos",  group=grp_accounts)
+account_8  = input.string("EMA_TOUCH_8",  "Account 8 combos",  group=grp_accounts)
+account_7  = input.string("EMA_TOUCH_7",  "Account 7 combos",  group=grp_accounts)
+account_6  = input.string("EMA_TOUCH_6",  "Account 6 combos",  group=grp_accounts)
+account_5  = input.string("EMA_TOUCH_5",  "Account 5 combos",  group=grp_accounts)
+account_4  = input.string("EMA_TOUCH_4",  "Account 4 combos",  group=grp_accounts)
+account_3  = input.string("EMA_TOUCH_3",  "Account 3 combos",  group=grp_accounts)
+account_2  = input.string("EMA_TOUCH_2",  "Account 2 combos",  group=grp_accounts)
+account_1  = input.string("EMA_TOUCH_1",  "Account 1 combo",   group=grp_accounts)
+
+// ═══════════════════════════════════════════════════════════════
+// CÁLCULOS COMPARTIDOS
+// ═══════════════════════════════════════════════════════════════
+candle_range   = high - low
+max_oc         = math.max(open, close)
+min_oc         = math.min(open, close)
+upper_wick_pct = candle_range > 0 ? (high - max_oc)  / candle_range * 100 : 0.0
+lower_wick_pct = candle_range > 0 ? (min_oc - low)   / candle_range * 100 : 0.0
+body_ratio     = candle_range > 0 ? math.abs(close - open) / candle_range * 100 : 0.0
+body_ok        = max_body_pct <= 0 or body_ratio < max_body_pct
+slow_ema_val   = ta.ema(close, slow_ema_per)
+
+// ═══════════════════════════════════════════════════════════════
+// MÁQUINAS DE ESTADO — un bloque por combo
+// Nomenclatura por combo N:
+//   emaN        = EMA value
+//   bac{N}      = body_above_count  (SHORT state)
+//   ctb{N}      = crossed_to_below
+//   fsd{N}      = first_short_done
+//   cbs{N}      = cross_body_ok_short
+//   bbc{N}      = body_below_count  (LONG state)
+//   cta{N}      = crossed_to_above
+//   fld{N}      = first_long_done
+//   cbl{N}      = cross_body_ok_long
+//   ft_sh{N}    = first_touch_short (raw, sin filtro daily)
+//   ft_lo{N}    = first_touch_long  (raw)
+//   sig_s{N}    = signal SHORT para combo N
+//   sig_l{N}    = signal LONG  para combo N
+//   fires{N}    = fires_N (any direction)
+// ═══════════════════════════════════════════════════════════════
+
+// ─── COMBO 1 ─────────────────────────────────────────────────
+ema1      = ta.ema(close, ema_per1)
+prev_ema1 = ema1[ema_slope_lb]
+bear1     = not use_slow_filter or ema1 < slow_ema_val
+bull1     = not use_slow_filter or ema1 > slow_ema_val
+sdn1      = not use_slope_filter or ema1 < prev_ema1
+sup1_s    = not use_slope_filter or ema1 > prev_ema1
+cs1       = high >= ema1 and max_oc < ema1 and bear1 and sdn1 and body_ok and close < open
+cl1       = low  <= ema1 and min_oc > ema1 and bull1 and sup1_s and body_ok and close > open
+
+var int  bac1 = 0
+var bool ctb1 = false
+var bool fsd1 = false
+var bool cbs1 = false
+if max_oc >= ema1
+    bac1 := bac1+1
+    ctb1 := false
+    fsd1 := false
+    cbs1 := false
+else
+    if bac1 >= consistency_bars
+        ctb1 := true
+        cbs1 := min_cross_body_pct<=0 or (open>close and candle_range>0 and (open-close)/candle_range*100>=min_cross_body_pct)
+    bac1 := 0
+ft_sh1 = cs1 and ctb1 and cbs1 and not fsd1 and upper_wick_pct >= min_wick1
+if ft_sh1
+    fsd1 := true
+
+var int  bbc1 = 0
+var bool cta1 = false
+var bool fld1 = false
+var bool cbl1 = false
+if min_oc <= ema1
+    bbc1 := bbc1+1
+    cta1 := false
+    fld1 := false
+    cbl1 := false
+else
+    if bbc1 >= consistency_bars
+        cta1 := true
+        cbl1 := min_cross_body_pct<=0 or (close>open and candle_range>0 and (close-open)/candle_range*100>=min_cross_body_pct)
+    bbc1 := 0
+ft_lo1 = cl1 and cta1 and cbl1 and not fld1 and lower_wick_pct >= min_wick1
+if ft_lo1
+    fld1 := true
+
+sig_s1 = direction_input != "LONG"  and ft_sh1
+sig_l1 = direction_input != "SHORT" and ft_lo1 and not sig_s1
+fires1 = sig_s1 or sig_l1
+
+// ─── COMBO 2 ─────────────────────────────────────────────────
+ema2      = ta.ema(close, ema_per2)
+prev_ema2 = ema2[ema_slope_lb]
+bear2     = not use_slow_filter or ema2 < slow_ema_val
+bull2     = not use_slow_filter or ema2 > slow_ema_val
+sdn2      = not use_slope_filter or ema2 < prev_ema2
+sup2_s    = not use_slope_filter or ema2 > prev_ema2
+cs2       = high >= ema2 and max_oc < ema2 and bear2 and sdn2 and body_ok and close < open
+cl2       = low  <= ema2 and min_oc > ema2 and bull2 and sup2_s and body_ok and close > open
+
+var int  bac2 = 0
+var bool ctb2 = false
+var bool fsd2 = false
+var bool cbs2 = false
+if max_oc >= ema2
+    bac2 := bac2+1
+    ctb2 := false
+    fsd2 := false
+    cbs2 := false
+else
+    if bac2 >= consistency_bars
+        ctb2 := true
+        cbs2 := min_cross_body_pct<=0 or (open>close and candle_range>0 and (open-close)/candle_range*100>=min_cross_body_pct)
+    bac2 := 0
+ft_sh2 = cs2 and ctb2 and cbs2 and not fsd2 and upper_wick_pct >= min_wick2
+if ft_sh2
+    fsd2 := true
+
+var int  bbc2 = 0
+var bool cta2 = false
+var bool fld2 = false
+var bool cbl2 = false
+if min_oc <= ema2
+    bbc2 := bbc2+1
+    cta2 := false
+    fld2 := false
+    cbl2 := false
+else
+    if bbc2 >= consistency_bars
+        cta2 := true
+        cbl2 := min_cross_body_pct<=0 or (close>open and candle_range>0 and (close-open)/candle_range*100>=min_cross_body_pct)
+    bbc2 := 0
+ft_lo2 = cl2 and cta2 and cbl2 and not fld2 and lower_wick_pct >= min_wick2
+if ft_lo2
+    fld2 := true
+
+sig_s2 = use_c2 and direction_input != "LONG"  and ft_sh2
+sig_l2 = use_c2 and direction_input != "SHORT" and ft_lo2 and not sig_s2
+fires2 = sig_s2 or sig_l2
+
+// ─── COMBO 3 ─────────────────────────────────────────────────
+ema3      = ta.ema(close, ema_per3)
+prev_ema3 = ema3[ema_slope_lb]
+bear3     = not use_slow_filter or ema3 < slow_ema_val
+bull3     = not use_slow_filter or ema3 > slow_ema_val
+sdn3      = not use_slope_filter or ema3 < prev_ema3
+sup3_s    = not use_slope_filter or ema3 > prev_ema3
+cs3       = high >= ema3 and max_oc < ema3 and bear3 and sdn3 and body_ok and close < open
+cl3       = low  <= ema3 and min_oc > ema3 and bull3 and sup3_s and body_ok and close > open
+
+var int  bac3 = 0
+var bool ctb3 = false
+var bool fsd3 = false
+var bool cbs3 = false
+if max_oc >= ema3
+    bac3 := bac3+1
+    ctb3 := false
+    fsd3 := false
+    cbs3 := false
+else
+    if bac3 >= consistency_bars
+        ctb3 := true
+        cbs3 := min_cross_body_pct<=0 or (open>close and candle_range>0 and (open-close)/candle_range*100>=min_cross_body_pct)
+    bac3 := 0
+ft_sh3 = cs3 and ctb3 and cbs3 and not fsd3 and upper_wick_pct >= min_wick3
+if ft_sh3
+    fsd3 := true
+
+var int  bbc3 = 0
+var bool cta3 = false
+var bool fld3 = false
+var bool cbl3 = false
+if min_oc <= ema3
+    bbc3 := bbc3+1
+    cta3 := false
+    fld3 := false
+    cbl3 := false
+else
+    if bbc3 >= consistency_bars
+        cta3 := true
+        cbl3 := min_cross_body_pct<=0 or (close>open and candle_range>0 and (close-open)/candle_range*100>=min_cross_body_pct)
+    bbc3 := 0
+ft_lo3 = cl3 and cta3 and cbl3 and not fld3 and lower_wick_pct >= min_wick3
+if ft_lo3
+    fld3 := true
+
+sig_s3 = use_c3 and direction_input != "LONG"  and ft_sh3
+sig_l3 = use_c3 and direction_input != "SHORT" and ft_lo3 and not sig_s3
+fires3 = sig_s3 or sig_l3
+
+// ─── COMBO 4 ─────────────────────────────────────────────────
+ema4      = ta.ema(close, ema_per4)
+prev_ema4 = ema4[ema_slope_lb]
+bear4     = not use_slow_filter or ema4 < slow_ema_val
+bull4     = not use_slow_filter or ema4 > slow_ema_val
+sdn4      = not use_slope_filter or ema4 < prev_ema4
+sup4_s    = not use_slope_filter or ema4 > prev_ema4
+cs4       = high >= ema4 and max_oc < ema4 and bear4 and sdn4 and body_ok and close < open
+cl4       = low  <= ema4 and min_oc > ema4 and bull4 and sup4_s and body_ok and close > open
+
+var int  bac4 = 0
+var bool ctb4 = false
+var bool fsd4 = false
+var bool cbs4 = false
+if max_oc >= ema4
+    bac4 := bac4+1
+    ctb4 := false
+    fsd4 := false
+    cbs4 := false
+else
+    if bac4 >= consistency_bars
+        ctb4 := true
+        cbs4 := min_cross_body_pct<=0 or (open>close and candle_range>0 and (open-close)/candle_range*100>=min_cross_body_pct)
+    bac4 := 0
+ft_sh4 = cs4 and ctb4 and cbs4 and not fsd4 and upper_wick_pct >= min_wick4
+if ft_sh4
+    fsd4 := true
+
+var int  bbc4 = 0
+var bool cta4 = false
+var bool fld4 = false
+var bool cbl4 = false
+if min_oc <= ema4
+    bbc4 := bbc4+1
+    cta4 := false
+    fld4 := false
+    cbl4 := false
+else
+    if bbc4 >= consistency_bars
+        cta4 := true
+        cbl4 := min_cross_body_pct<=0 or (close>open and candle_range>0 and (close-open)/candle_range*100>=min_cross_body_pct)
+    bbc4 := 0
+ft_lo4 = cl4 and cta4 and cbl4 and not fld4 and lower_wick_pct >= min_wick4
+if ft_lo4
+    fld4 := true
+
+sig_s4 = use_c4 and direction_input != "LONG"  and ft_sh4
+sig_l4 = use_c4 and direction_input != "SHORT" and ft_lo4 and not sig_s4
+fires4 = sig_s4 or sig_l4
+
+// ─── COMBO 5 ─────────────────────────────────────────────────
+ema5      = ta.ema(close, ema_per5)
+prev_ema5 = ema5[ema_slope_lb]
+bear5     = not use_slow_filter or ema5 < slow_ema_val
+bull5     = not use_slow_filter or ema5 > slow_ema_val
+sdn5      = not use_slope_filter or ema5 < prev_ema5
+sup5_s    = not use_slope_filter or ema5 > prev_ema5
+cs5       = high >= ema5 and max_oc < ema5 and bear5 and sdn5 and body_ok and close < open
+cl5       = low  <= ema5 and min_oc > ema5 and bull5 and sup5_s and body_ok and close > open
+
+var int  bac5 = 0
+var bool ctb5 = false
+var bool fsd5 = false
+var bool cbs5 = false
+if max_oc >= ema5
+    bac5 := bac5+1
+    ctb5 := false
+    fsd5 := false
+    cbs5 := false
+else
+    if bac5 >= consistency_bars
+        ctb5 := true
+        cbs5 := min_cross_body_pct<=0 or (open>close and candle_range>0 and (open-close)/candle_range*100>=min_cross_body_pct)
+    bac5 := 0
+ft_sh5 = cs5 and ctb5 and cbs5 and not fsd5 and upper_wick_pct >= min_wick5
+if ft_sh5
+    fsd5 := true
+
+var int  bbc5 = 0
+var bool cta5 = false
+var bool fld5 = false
+var bool cbl5 = false
+if min_oc <= ema5
+    bbc5 := bbc5+1
+    cta5 := false
+    fld5 := false
+    cbl5 := false
+else
+    if bbc5 >= consistency_bars
+        cta5 := true
+        cbl5 := min_cross_body_pct<=0 or (close>open and candle_range>0 and (close-open)/candle_range*100>=min_cross_body_pct)
+    bbc5 := 0
+ft_lo5 = cl5 and cta5 and cbl5 and not fld5 and lower_wick_pct >= min_wick5
+if ft_lo5
+    fld5 := true
+
+sig_s5 = use_c5 and direction_input != "LONG"  and ft_sh5
+sig_l5 = use_c5 and direction_input != "SHORT" and ft_lo5 and not sig_s5
+fires5 = sig_s5 or sig_l5
+
+// ─── COMBO 6 ─────────────────────────────────────────────────
+ema6      = ta.ema(close, ema_per6)
+prev_ema6 = ema6[ema_slope_lb]
+bear6     = not use_slow_filter or ema6 < slow_ema_val
+bull6     = not use_slow_filter or ema6 > slow_ema_val
+sdn6      = not use_slope_filter or ema6 < prev_ema6
+sup6_s    = not use_slope_filter or ema6 > prev_ema6
+cs6       = high >= ema6 and max_oc < ema6 and bear6 and sdn6 and body_ok and close < open
+cl6       = low  <= ema6 and min_oc > ema6 and bull6 and sup6_s and body_ok and close > open
+
+var int  bac6 = 0
+var bool ctb6 = false
+var bool fsd6 = false
+var bool cbs6 = false
+if max_oc >= ema6
+    bac6 := bac6+1
+    ctb6 := false
+    fsd6 := false
+    cbs6 := false
+else
+    if bac6 >= consistency_bars
+        ctb6 := true
+        cbs6 := min_cross_body_pct<=0 or (open>close and candle_range>0 and (open-close)/candle_range*100>=min_cross_body_pct)
+    bac6 := 0
+ft_sh6 = cs6 and ctb6 and cbs6 and not fsd6 and upper_wick_pct >= min_wick6
+if ft_sh6
+    fsd6 := true
+
+var int  bbc6 = 0
+var bool cta6 = false
+var bool fld6 = false
+var bool cbl6 = false
+if min_oc <= ema6
+    bbc6 := bbc6+1
+    cta6 := false
+    fld6 := false
+    cbl6 := false
+else
+    if bbc6 >= consistency_bars
+        cta6 := true
+        cbl6 := min_cross_body_pct<=0 or (close>open and candle_range>0 and (close-open)/candle_range*100>=min_cross_body_pct)
+    bbc6 := 0
+ft_lo6 = cl6 and cta6 and cbl6 and not fld6 and lower_wick_pct >= min_wick6
+if ft_lo6
+    fld6 := true
+
+sig_s6 = use_c6 and direction_input != "LONG"  and ft_sh6
+sig_l6 = use_c6 and direction_input != "SHORT" and ft_lo6 and not sig_s6
+fires6 = sig_s6 or sig_l6
+
+// ─── COMBO 7 ─────────────────────────────────────────────────
+ema7      = ta.ema(close, ema_per7)
+prev_ema7 = ema7[ema_slope_lb]
+bear7     = not use_slow_filter or ema7 < slow_ema_val
+bull7     = not use_slow_filter or ema7 > slow_ema_val
+sdn7      = not use_slope_filter or ema7 < prev_ema7
+sup7_s    = not use_slope_filter or ema7 > prev_ema7
+cs7       = high >= ema7 and max_oc < ema7 and bear7 and sdn7 and body_ok and close < open
+cl7       = low  <= ema7 and min_oc > ema7 and bull7 and sup7_s and body_ok and close > open
+
+var int  bac7 = 0
+var bool ctb7 = false
+var bool fsd7 = false
+var bool cbs7 = false
+if max_oc >= ema7
+    bac7 := bac7+1
+    ctb7 := false
+    fsd7 := false
+    cbs7 := false
+else
+    if bac7 >= consistency_bars
+        ctb7 := true
+        cbs7 := min_cross_body_pct<=0 or (open>close and candle_range>0 and (open-close)/candle_range*100>=min_cross_body_pct)
+    bac7 := 0
+ft_sh7 = cs7 and ctb7 and cbs7 and not fsd7 and upper_wick_pct >= min_wick7
+if ft_sh7
+    fsd7 := true
+
+var int  bbc7 = 0
+var bool cta7 = false
+var bool fld7 = false
+var bool cbl7 = false
+if min_oc <= ema7
+    bbc7 := bbc7+1
+    cta7 := false
+    fld7 := false
+    cbl7 := false
+else
+    if bbc7 >= consistency_bars
+        cta7 := true
+        cbl7 := min_cross_body_pct<=0 or (close>open and candle_range>0 and (close-open)/candle_range*100>=min_cross_body_pct)
+    bbc7 := 0
+ft_lo7 = cl7 and cta7 and cbl7 and not fld7 and lower_wick_pct >= min_wick7
+if ft_lo7
+    fld7 := true
+
+sig_s7 = use_c7 and direction_input != "LONG"  and ft_sh7
+sig_l7 = use_c7 and direction_input != "SHORT" and ft_lo7 and not sig_s7
+fires7 = sig_s7 or sig_l7
+
+// ─── COMBO 8 ─────────────────────────────────────────────────
+ema8      = ta.ema(close, ema_per8)
+prev_ema8 = ema8[ema_slope_lb]
+bear8     = not use_slow_filter or ema8 < slow_ema_val
+bull8     = not use_slow_filter or ema8 > slow_ema_val
+sdn8      = not use_slope_filter or ema8 < prev_ema8
+sup8_s    = not use_slope_filter or ema8 > prev_ema8
+cs8       = high >= ema8 and max_oc < ema8 and bear8 and sdn8 and body_ok and close < open
+cl8       = low  <= ema8 and min_oc > ema8 and bull8 and sup8_s and body_ok and close > open
+
+var int  bac8 = 0
+var bool ctb8 = false
+var bool fsd8 = false
+var bool cbs8 = false
+if max_oc >= ema8
+    bac8 := bac8+1
+    ctb8 := false
+    fsd8 := false
+    cbs8 := false
+else
+    if bac8 >= consistency_bars
+        ctb8 := true
+        cbs8 := min_cross_body_pct<=0 or (open>close and candle_range>0 and (open-close)/candle_range*100>=min_cross_body_pct)
+    bac8 := 0
+ft_sh8 = cs8 and ctb8 and cbs8 and not fsd8 and upper_wick_pct >= min_wick8
+if ft_sh8
+    fsd8 := true
+
+var int  bbc8 = 0
+var bool cta8 = false
+var bool fld8 = false
+var bool cbl8 = false
+if min_oc <= ema8
+    bbc8 := bbc8+1
+    cta8 := false
+    fld8 := false
+    cbl8 := false
+else
+    if bbc8 >= consistency_bars
+        cta8 := true
+        cbl8 := min_cross_body_pct<=0 or (close>open and candle_range>0 and (close-open)/candle_range*100>=min_cross_body_pct)
+    bbc8 := 0
+ft_lo8 = cl8 and cta8 and cbl8 and not fld8 and lower_wick_pct >= min_wick8
+if ft_lo8
+    fld8 := true
+
+sig_s8 = use_c8 and direction_input != "LONG"  and ft_sh8
+sig_l8 = use_c8 and direction_input != "SHORT" and ft_lo8 and not sig_s8
+fires8 = sig_s8 or sig_l8
+
+// ─── COMBO 9 ─────────────────────────────────────────────────
+ema9      = ta.ema(close, ema_per9)
+prev_ema9 = ema9[ema_slope_lb]
+bear9     = not use_slow_filter or ema9 < slow_ema_val
+bull9     = not use_slow_filter or ema9 > slow_ema_val
+sdn9      = not use_slope_filter or ema9 < prev_ema9
+sup9_s    = not use_slope_filter or ema9 > prev_ema9
+cs9       = high >= ema9 and max_oc < ema9 and bear9 and sdn9 and body_ok and close < open
+cl9       = low  <= ema9 and min_oc > ema9 and bull9 and sup9_s and body_ok and close > open
+
+var int  bac9 = 0
+var bool ctb9 = false
+var bool fsd9 = false
+var bool cbs9 = false
+if max_oc >= ema9
+    bac9 := bac9+1
+    ctb9 := false
+    fsd9 := false
+    cbs9 := false
+else
+    if bac9 >= consistency_bars
+        ctb9 := true
+        cbs9 := min_cross_body_pct<=0 or (open>close and candle_range>0 and (open-close)/candle_range*100>=min_cross_body_pct)
+    bac9 := 0
+ft_sh9 = cs9 and ctb9 and cbs9 and not fsd9 and upper_wick_pct >= min_wick9
+if ft_sh9
+    fsd9 := true
+
+var int  bbc9 = 0
+var bool cta9 = false
+var bool fld9 = false
+var bool cbl9 = false
+if min_oc <= ema9
+    bbc9 := bbc9+1
+    cta9 := false
+    fld9 := false
+    cbl9 := false
+else
+    if bbc9 >= consistency_bars
+        cta9 := true
+        cbl9 := min_cross_body_pct<=0 or (close>open and candle_range>0 and (close-open)/candle_range*100>=min_cross_body_pct)
+    bbc9 := 0
+ft_lo9 = cl9 and cta9 and cbl9 and not fld9 and lower_wick_pct >= min_wick9
+if ft_lo9
+    fld9 := true
+
+sig_s9 = use_c9 and direction_input != "LONG"  and ft_sh9
+sig_l9 = use_c9 and direction_input != "SHORT" and ft_lo9 and not sig_s9
+fires9 = sig_s9 or sig_l9
+
+// ─── COMBO 10 ────────────────────────────────────────────────
+ema10      = ta.ema(close, ema_per10)
+prev_ema10 = ema10[ema_slope_lb]
+bear10     = not use_slow_filter or ema10 < slow_ema_val
+bull10     = not use_slow_filter or ema10 > slow_ema_val
+sdn10      = not use_slope_filter or ema10 < prev_ema10
+sup10_s    = not use_slope_filter or ema10 > prev_ema10
+cs10       = high >= ema10 and max_oc < ema10 and bear10 and sdn10 and body_ok and close < open
+cl10       = low  <= ema10 and min_oc > ema10 and bull10 and sup10_s and body_ok and close > open
+
+var int  bac10 = 0
+var bool ctb10 = false
+var bool fsd10 = false
+var bool cbs10 = false
+if max_oc >= ema10
+    bac10 := bac10+1
+    ctb10 := false
+    fsd10 := false
+    cbs10 := false
+else
+    if bac10 >= consistency_bars
+        ctb10 := true
+        cbs10 := min_cross_body_pct<=0 or (open>close and candle_range>0 and (open-close)/candle_range*100>=min_cross_body_pct)
+    bac10 := 0
+ft_sh10 = cs10 and ctb10 and cbs10 and not fsd10 and upper_wick_pct >= min_wick10
+if ft_sh10
+    fsd10 := true
+
+var int  bbc10 = 0
+var bool cta10 = false
+var bool fld10 = false
+var bool cbl10 = false
+if min_oc <= ema10
+    bbc10 := bbc10+1
+    cta10 := false
+    fld10 := false
+    cbl10 := false
+else
+    if bbc10 >= consistency_bars
+        cta10 := true
+        cbl10 := min_cross_body_pct<=0 or (close>open and candle_range>0 and (close-open)/candle_range*100>=min_cross_body_pct)
+    bbc10 := 0
+ft_lo10 = cl10 and cta10 and cbl10 and not fld10 and lower_wick_pct >= min_wick10
+if ft_lo10
+    fld10 := true
+
+sig_s10 = use_c10 and direction_input != "LONG"  and ft_sh10
+sig_l10 = use_c10 and direction_input != "SHORT" and ft_lo10 and not sig_s10
+fires10 = sig_s10 or sig_l10
+
+// ─── COMBO 11 ────────────────────────────────────────────────
+ema11      = ta.ema(close, ema_per11)
+prev_ema11 = ema11[ema_slope_lb]
+bear11     = not use_slow_filter or ema11 < slow_ema_val
+bull11     = not use_slow_filter or ema11 > slow_ema_val
+sdn11      = not use_slope_filter or ema11 < prev_ema11
+sup11_s    = not use_slope_filter or ema11 > prev_ema11
+cs11       = high >= ema11 and max_oc < ema11 and bear11 and sdn11 and body_ok and close < open
+cl11       = low  <= ema11 and min_oc > ema11 and bull11 and sup11_s and body_ok and close > open
+
+var int  bac11 = 0
+var bool ctb11 = false
+var bool fsd11 = false
+var bool cbs11 = false
+if max_oc >= ema11
+    bac11 := bac11+1
+    ctb11 := false
+    fsd11 := false
+    cbs11 := false
+else
+    if bac11 >= consistency_bars
+        ctb11 := true
+        cbs11 := min_cross_body_pct<=0 or (open>close and candle_range>0 and (open-close)/candle_range*100>=min_cross_body_pct)
+    bac11 := 0
+ft_sh11 = cs11 and ctb11 and cbs11 and not fsd11 and upper_wick_pct >= min_wick11
+if ft_sh11
+    fsd11 := true
+
+var int  bbc11 = 0
+var bool cta11 = false
+var bool fld11 = false
+var bool cbl11 = false
+if min_oc <= ema11
+    bbc11 := bbc11+1
+    cta11 := false
+    fld11 := false
+    cbl11 := false
+else
+    if bbc11 >= consistency_bars
+        cta11 := true
+        cbl11 := min_cross_body_pct<=0 or (close>open and candle_range>0 and (close-open)/candle_range*100>=min_cross_body_pct)
+    bbc11 := 0
+ft_lo11 = cl11 and cta11 and cbl11 and not fld11 and lower_wick_pct >= min_wick11
+if ft_lo11
+    fld11 := true
+
+sig_s11 = use_c11 and direction_input != "LONG"  and ft_sh11
+sig_l11 = use_c11 and direction_input != "SHORT" and ft_lo11 and not sig_s11
+fires11 = sig_s11 or sig_l11
+
+// ─── COMBO 12 ────────────────────────────────────────────────
+ema12      = ta.ema(close, ema_per12)
+prev_ema12 = ema12[ema_slope_lb]
+bear12     = not use_slow_filter or ema12 < slow_ema_val
+bull12     = not use_slow_filter or ema12 > slow_ema_val
+sdn12      = not use_slope_filter or ema12 < prev_ema12
+sup12_s    = not use_slope_filter or ema12 > prev_ema12
+cs12       = high >= ema12 and max_oc < ema12 and bear12 and sdn12 and body_ok and close < open
+cl12       = low  <= ema12 and min_oc > ema12 and bull12 and sup12_s and body_ok and close > open
+
+var int  bac12 = 0
+var bool ctb12 = false
+var bool fsd12 = false
+var bool cbs12 = false
+if max_oc >= ema12
+    bac12 := bac12+1
+    ctb12 := false
+    fsd12 := false
+    cbs12 := false
+else
+    if bac12 >= consistency_bars
+        ctb12 := true
+        cbs12 := min_cross_body_pct<=0 or (open>close and candle_range>0 and (open-close)/candle_range*100>=min_cross_body_pct)
+    bac12 := 0
+ft_sh12 = cs12 and ctb12 and cbs12 and not fsd12 and upper_wick_pct >= min_wick12
+if ft_sh12
+    fsd12 := true
+
+var int  bbc12 = 0
+var bool cta12 = false
+var bool fld12 = false
+var bool cbl12 = false
+if min_oc <= ema12
+    bbc12 := bbc12+1
+    cta12 := false
+    fld12 := false
+    cbl12 := false
+else
+    if bbc12 >= consistency_bars
+        cta12 := true
+        cbl12 := min_cross_body_pct<=0 or (close>open and candle_range>0 and (close-open)/candle_range*100>=min_cross_body_pct)
+    bbc12 := 0
+ft_lo12 = cl12 and cta12 and cbl12 and not fld12 and lower_wick_pct >= min_wick12
+if ft_lo12
+    fld12 := true
+
+sig_s12 = use_c12 and direction_input != "LONG"  and ft_sh12
+sig_l12 = use_c12 and direction_input != "SHORT" and ft_lo12 and not sig_s12
+fires12 = sig_s12 or sig_l12
+
+// ─── COMBO 13 ────────────────────────────────────────────────
+ema13      = ta.ema(close, ema_per13)
+prev_ema13 = ema13[ema_slope_lb]
+bear13     = not use_slow_filter or ema13 < slow_ema_val
+bull13     = not use_slow_filter or ema13 > slow_ema_val
+sdn13      = not use_slope_filter or ema13 < prev_ema13
+sup13_s    = not use_slope_filter or ema13 > prev_ema13
+cs13       = high >= ema13 and max_oc < ema13 and bear13 and sdn13 and body_ok and close < open
+cl13       = low  <= ema13 and min_oc > ema13 and bull13 and sup13_s and body_ok and close > open
+
+var int  bac13 = 0
+var bool ctb13 = false
+var bool fsd13 = false
+var bool cbs13 = false
+if max_oc >= ema13
+    bac13 := bac13+1
+    ctb13 := false
+    fsd13 := false
+    cbs13 := false
+else
+    if bac13 >= consistency_bars
+        ctb13 := true
+        cbs13 := min_cross_body_pct<=0 or (open>close and candle_range>0 and (open-close)/candle_range*100>=min_cross_body_pct)
+    bac13 := 0
+ft_sh13 = cs13 and ctb13 and cbs13 and not fsd13 and upper_wick_pct >= min_wick13
+if ft_sh13
+    fsd13 := true
+
+var int  bbc13 = 0
+var bool cta13 = false
+var bool fld13 = false
+var bool cbl13 = false
+if min_oc <= ema13
+    bbc13 := bbc13+1
+    cta13 := false
+    fld13 := false
+    cbl13 := false
+else
+    if bbc13 >= consistency_bars
+        cta13 := true
+        cbl13 := min_cross_body_pct<=0 or (close>open and candle_range>0 and (close-open)/candle_range*100>=min_cross_body_pct)
+    bbc13 := 0
+ft_lo13 = cl13 and cta13 and cbl13 and not fld13 and lower_wick_pct >= min_wick13
+if ft_lo13
+    fld13 := true
+
+sig_s13 = use_c13 and direction_input != "LONG"  and ft_sh13
+sig_l13 = use_c13 and direction_input != "SHORT" and ft_lo13 and not sig_s13
+fires13 = sig_s13 or sig_l13
+
+// ═══════════════════════════════════════════════════════════════
+// SEÑALES CON PRIORIDAD C1 > C2 > … > C13 — 1 trade por día (UTC)
+// ═══════════════════════════════════════════════════════════════
+new_day_utc = ta.change(time("D", "0000-0000", "UTC")) != 0
+
+var bool daily_signal_used = false
+if new_day_utc
+    daily_signal_used := false
+
+var bool trade_open        = false
+var float entry_price      = na
+var float stop_loss_price  = na
+var float take_profit_price = na
+var int   entry_bar        = na
+var int   trade_tipo       = 0   // 1=SHORT, 2=LONG
+var string trade_result    = "Sin trade"
+var float trade_eff_tp_pct = 0.0
+var float trade_eff_sl_pct = 0.0
+
+can_fire_now = not daily_signal_used and not trade_open
+
+final_signal_1  = fires1  and can_fire_now
+final_signal_2  = fires2  and can_fire_now and not final_signal_1
+final_signal_3  = fires3  and can_fire_now and not final_signal_1 and not final_signal_2
+final_signal_4  = fires4  and can_fire_now and not final_signal_1 and not final_signal_2 and not final_signal_3
+final_signal_5  = fires5  and can_fire_now and not final_signal_1 and not final_signal_2 and not final_signal_3 and not final_signal_4
+final_signal_6  = fires6  and can_fire_now and not final_signal_1 and not final_signal_2 and not final_signal_3 and not final_signal_4 and not final_signal_5
+final_signal_7  = fires7  and can_fire_now and not final_signal_1 and not final_signal_2 and not final_signal_3 and not final_signal_4 and not final_signal_5 and not final_signal_6
+final_signal_8  = fires8  and can_fire_now and not final_signal_1 and not final_signal_2 and not final_signal_3 and not final_signal_4 and not final_signal_5 and not final_signal_6 and not final_signal_7
+final_signal_9  = fires9  and can_fire_now and not final_signal_1 and not final_signal_2 and not final_signal_3 and not final_signal_4 and not final_signal_5 and not final_signal_6 and not final_signal_7 and not final_signal_8
+final_signal_10 = fires10 and can_fire_now and not final_signal_1 and not final_signal_2 and not final_signal_3 and not final_signal_4 and not final_signal_5 and not final_signal_6 and not final_signal_7 and not final_signal_8 and not final_signal_9
+final_signal_11 = fires11 and can_fire_now and not final_signal_1 and not final_signal_2 and not final_signal_3 and not final_signal_4 and not final_signal_5 and not final_signal_6 and not final_signal_7 and not final_signal_8 and not final_signal_9 and not final_signal_10
+final_signal_12 = fires12 and can_fire_now and not final_signal_1 and not final_signal_2 and not final_signal_3 and not final_signal_4 and not final_signal_5 and not final_signal_6 and not final_signal_7 and not final_signal_8 and not final_signal_9 and not final_signal_10 and not final_signal_11
+final_signal_13 = fires13 and can_fire_now and not final_signal_1 and not final_signal_2 and not final_signal_3 and not final_signal_4 and not final_signal_5 and not final_signal_6 and not final_signal_7 and not final_signal_8 and not final_signal_9 and not final_signal_10 and not final_signal_11 and not final_signal_12
+
+final_any_signal = final_signal_1 or final_signal_2 or final_signal_3 or final_signal_4 or final_signal_5 or final_signal_6 or final_signal_7 or final_signal_8 or final_signal_9 or final_signal_10 or final_signal_11 or final_signal_12 or final_signal_13
+
+if final_any_signal
+    daily_signal_used := true
+
+// Flags de apertura para plotshape (se resetean cada barra)
+var bool op_s1 = false
+var bool op_l1 = false
+var bool op_s2 = false
+var bool op_l2 = false
+var bool op_s3 = false
+var bool op_l3 = false
+var bool op_s4 = false
+var bool op_l4 = false
+var bool op_s5 = false
+var bool op_l5 = false
+var bool op_s6 = false
+var bool op_l6 = false
+var bool op_s7 = false
+var bool op_l7 = false
+var bool op_s8 = false
+var bool op_l8 = false
+var bool op_s9 = false
+var bool op_l9 = false
+var bool op_s10 = false
+var bool op_l10 = false
+var bool op_s11 = false
+var bool op_l11 = false
+var bool op_s12 = false
+var bool op_l12 = false
+var bool op_s13 = false
+var bool op_l13 = false
+
+op_s1:=false
+op_l1:=false
+op_s2:=false
+op_l2:=false
+op_s3:=false
+op_l3:=false
+op_s4:=false
+op_l4:=false
+op_s5:=false
+op_l5:=false
+op_s6:=false
+op_l6:=false
+op_s7:=false
+op_l7:=false
+op_s8:=false
+op_l8:=false
+op_s9:=false
+op_l9:=false
+op_s10:=false
+op_l10:=false
+op_s11:=false
+op_l11:=false
+op_s12:=false
+op_l12:=false
+op_s13:=false
+op_l13:=false
+
+// ═══════════════════════════════════════════════════════════════
+// APERTURA DE TRADES
+// ═══════════════════════════════════════════════════════════════
+
+if final_signal_1
+    _tipo = sig_s1 ? 1 : 2
+    _sl   = _tipo==1 ? close*(1+sl_pct1/100) : close*(1-sl_pct1/100)
+    _tp   = _tipo==1 ? close*(1-tp_pct1/100) : close*(1+tp_pct1/100)
+    entry_price       := close
+    stop_loss_price   := _sl
+    take_profit_price := _tp
+    trade_eff_tp_pct  := math.max(tp_pct1-fee_tp_pct,0)*leverage
+    trade_eff_sl_pct  := (sl_pct1+fee_sl_pct)*leverage
+    trade_open        := true
+    trade_tipo        := _tipo
+    entry_bar         := bar_index
+    trade_result      := "Abierto (C1 " + (_tipo==1?"SHORT":"LONG") + ")"
+    if sig_s1
+        op_s1 := true
+    else
+        op_l1 := true
+
+if final_signal_2
+    _tipo = sig_s2 ? 1 : 2
+    _sl   = _tipo==1 ? close*(1+sl_pct2/100) : close*(1-sl_pct2/100)
+    _tp   = _tipo==1 ? close*(1-tp_pct2/100) : close*(1+tp_pct2/100)
+    entry_price       := close
+    stop_loss_price   := _sl
+    take_profit_price := _tp
+    trade_eff_tp_pct  := math.max(tp_pct2-fee_tp_pct,0)*leverage
+    trade_eff_sl_pct  := (sl_pct2+fee_sl_pct)*leverage
+    trade_open        := true
+    trade_tipo        := _tipo
+    entry_bar         := bar_index
+    trade_result      := "Abierto (C2 " + (_tipo==1?"SHORT":"LONG") + ")"
+    if sig_s2
+        op_s2 := true
+    else
+        op_l2 := true
+
+if final_signal_3
+    _tipo = sig_s3 ? 1 : 2
+    _sl   = _tipo==1 ? close*(1+sl_pct3/100) : close*(1-sl_pct3/100)
+    _tp   = _tipo==1 ? close*(1-tp_pct3/100) : close*(1+tp_pct3/100)
+    entry_price       := close
+    stop_loss_price   := _sl
+    take_profit_price := _tp
+    trade_eff_tp_pct  := math.max(tp_pct3-fee_tp_pct,0)*leverage
+    trade_eff_sl_pct  := (sl_pct3+fee_sl_pct)*leverage
+    trade_open        := true
+    trade_tipo        := _tipo
+    entry_bar         := bar_index
+    trade_result      := "Abierto (C3 " + (_tipo==1?"SHORT":"LONG") + ")"
+    if sig_s3
+        op_s3 := true
+    else
+        op_l3 := true
+
+if final_signal_4
+    _tipo = sig_s4 ? 1 : 2
+    _sl   = _tipo==1 ? close*(1+sl_pct4/100) : close*(1-sl_pct4/100)
+    _tp   = _tipo==1 ? close*(1-tp_pct4/100) : close*(1+tp_pct4/100)
+    entry_price       := close
+    stop_loss_price   := _sl
+    take_profit_price := _tp
+    trade_eff_tp_pct  := math.max(tp_pct4-fee_tp_pct,0)*leverage
+    trade_eff_sl_pct  := (sl_pct4+fee_sl_pct)*leverage
+    trade_open        := true
+    trade_tipo        := _tipo
+    entry_bar         := bar_index
+    trade_result      := "Abierto (C4 " + (_tipo==1?"SHORT":"LONG") + ")"
+    if sig_s4
+        op_s4 := true
+    else
+        op_l4 := true
+
+if final_signal_5
+    _tipo = sig_s5 ? 1 : 2
+    _sl   = _tipo==1 ? close*(1+sl_pct5/100) : close*(1-sl_pct5/100)
+    _tp   = _tipo==1 ? close*(1-tp_pct5/100) : close*(1+tp_pct5/100)
+    entry_price       := close
+    stop_loss_price   := _sl
+    take_profit_price := _tp
+    trade_eff_tp_pct  := math.max(tp_pct5-fee_tp_pct,0)*leverage
+    trade_eff_sl_pct  := (sl_pct5+fee_sl_pct)*leverage
+    trade_open        := true
+    trade_tipo        := _tipo
+    entry_bar         := bar_index
+    trade_result      := "Abierto (C5 " + (_tipo==1?"SHORT":"LONG") + ")"
+    if sig_s5
+        op_s5 := true
+    else
+        op_l5 := true
+
+if final_signal_6
+    _tipo = sig_s6 ? 1 : 2
+    _sl   = _tipo==1 ? close*(1+sl_pct6/100) : close*(1-sl_pct6/100)
+    _tp   = _tipo==1 ? close*(1-tp_pct6/100) : close*(1+tp_pct6/100)
+    entry_price       := close
+    stop_loss_price   := _sl
+    take_profit_price := _tp
+    trade_eff_tp_pct  := math.max(tp_pct6-fee_tp_pct,0)*leverage
+    trade_eff_sl_pct  := (sl_pct6+fee_sl_pct)*leverage
+    trade_open        := true
+    trade_tipo        := _tipo
+    entry_bar         := bar_index
+    trade_result      := "Abierto (C6 " + (_tipo==1?"SHORT":"LONG") + ")"
+    if sig_s6
+        op_s6 := true
+    else
+        op_l6 := true
+
+if final_signal_7
+    _tipo = sig_s7 ? 1 : 2
+    _sl   = _tipo==1 ? close*(1+sl_pct7/100) : close*(1-sl_pct7/100)
+    _tp   = _tipo==1 ? close*(1-tp_pct7/100) : close*(1+tp_pct7/100)
+    entry_price       := close
+    stop_loss_price   := _sl
+    take_profit_price := _tp
+    trade_eff_tp_pct  := math.max(tp_pct7-fee_tp_pct,0)*leverage
+    trade_eff_sl_pct  := (sl_pct7+fee_sl_pct)*leverage
+    trade_open        := true
+    trade_tipo        := _tipo
+    entry_bar         := bar_index
+    trade_result      := "Abierto (C7 " + (_tipo==1?"SHORT":"LONG") + ")"
+    if sig_s7
+        op_s7 := true
+    else
+        op_l7 := true
+
+if final_signal_8
+    _tipo = sig_s8 ? 1 : 2
+    _sl   = _tipo==1 ? close*(1+sl_pct8/100) : close*(1-sl_pct8/100)
+    _tp   = _tipo==1 ? close*(1-tp_pct8/100) : close*(1+tp_pct8/100)
+    entry_price       := close
+    stop_loss_price   := _sl
+    take_profit_price := _tp
+    trade_eff_tp_pct  := math.max(tp_pct8-fee_tp_pct,0)*leverage
+    trade_eff_sl_pct  := (sl_pct8+fee_sl_pct)*leverage
+    trade_open        := true
+    trade_tipo        := _tipo
+    entry_bar         := bar_index
+    trade_result      := "Abierto (C8 " + (_tipo==1?"SHORT":"LONG") + ")"
+    if sig_s8
+        op_s8 := true
+    else
+        op_l8 := true
+
+if final_signal_9
+    _tipo = sig_s9 ? 1 : 2
+    _sl   = _tipo==1 ? close*(1+sl_pct9/100) : close*(1-sl_pct9/100)
+    _tp   = _tipo==1 ? close*(1-tp_pct9/100) : close*(1+tp_pct9/100)
+    entry_price       := close
+    stop_loss_price   := _sl
+    take_profit_price := _tp
+    trade_eff_tp_pct  := math.max(tp_pct9-fee_tp_pct,0)*leverage
+    trade_eff_sl_pct  := (sl_pct9+fee_sl_pct)*leverage
+    trade_open        := true
+    trade_tipo        := _tipo
+    entry_bar         := bar_index
+    trade_result      := "Abierto (C9 " + (_tipo==1?"SHORT":"LONG") + ")"
+    if sig_s9
+        op_s9 := true
+    else
+        op_l9 := true
+
+if final_signal_10
+    _tipo = sig_s10 ? 1 : 2
+    _sl   = _tipo==1 ? close*(1+sl_pct10/100) : close*(1-sl_pct10/100)
+    _tp   = _tipo==1 ? close*(1-tp_pct10/100) : close*(1+tp_pct10/100)
+    entry_price       := close
+    stop_loss_price   := _sl
+    take_profit_price := _tp
+    trade_eff_tp_pct  := math.max(tp_pct10-fee_tp_pct,0)*leverage
+    trade_eff_sl_pct  := (sl_pct10+fee_sl_pct)*leverage
+    trade_open        := true
+    trade_tipo        := _tipo
+    entry_bar         := bar_index
+    trade_result      := "Abierto (C10 " + (_tipo==1?"SHORT":"LONG") + ")"
+    if sig_s10
+        op_s10 := true
+    else
+        op_l10 := true
+
+if final_signal_11
+    _tipo = sig_s11 ? 1 : 2
+    _sl   = _tipo==1 ? close*(1+sl_pct11/100) : close*(1-sl_pct11/100)
+    _tp   = _tipo==1 ? close*(1-tp_pct11/100) : close*(1+tp_pct11/100)
+    entry_price       := close
+    stop_loss_price   := _sl
+    take_profit_price := _tp
+    trade_eff_tp_pct  := math.max(tp_pct11-fee_tp_pct,0)*leverage
+    trade_eff_sl_pct  := (sl_pct11+fee_sl_pct)*leverage
+    trade_open        := true
+    trade_tipo        := _tipo
+    entry_bar         := bar_index
+    trade_result      := "Abierto (C11 " + (_tipo==1?"SHORT":"LONG") + ")"
+    if sig_s11
+        op_s11 := true
+    else
+        op_l11 := true
+
+if final_signal_12
+    _tipo = sig_s12 ? 1 : 2
+    _sl   = _tipo==1 ? close*(1+sl_pct12/100) : close*(1-sl_pct12/100)
+    _tp   = _tipo==1 ? close*(1-tp_pct12/100) : close*(1+tp_pct12/100)
+    entry_price       := close
+    stop_loss_price   := _sl
+    take_profit_price := _tp
+    trade_eff_tp_pct  := math.max(tp_pct12-fee_tp_pct,0)*leverage
+    trade_eff_sl_pct  := (sl_pct12+fee_sl_pct)*leverage
+    trade_open        := true
+    trade_tipo        := _tipo
+    entry_bar         := bar_index
+    trade_result      := "Abierto (C12 " + (_tipo==1?"SHORT":"LONG") + ")"
+    if sig_s12
+        op_s12 := true
+    else
+        op_l12 := true
+
+if final_signal_13
+    _tipo = sig_s13 ? 1 : 2
+    _sl   = _tipo==1 ? close*(1+sl_pct13/100) : close*(1-sl_pct13/100)
+    _tp   = _tipo==1 ? close*(1-tp_pct13/100) : close*(1+tp_pct13/100)
+    entry_price       := close
+    stop_loss_price   := _sl
+    take_profit_price := _tp
+    trade_eff_tp_pct  := math.max(tp_pct13-fee_tp_pct,0)*leverage
+    trade_eff_sl_pct  := (sl_pct13+fee_sl_pct)*leverage
+    trade_open        := true
+    trade_tipo        := _tipo
+    entry_bar         := bar_index
+    trade_result      := "Abierto (C13 " + (_tipo==1?"SHORT":"LONG") + ")"
+    if sig_s13
+        op_s13 := true
+    else
+        op_l13 := true
+
+// ═══════════════════════════════════════════════════════════════
+// CIERRE DE TRADE — SL tiene prioridad
+// TP/SL solo desde la vela siguiente a la entrada
+// ═══════════════════════════════════════════════════════════════
+sl_hit = trade_open and bar_index != entry_bar and
+     ((trade_tipo == 1 and high >= stop_loss_price) or
+      (trade_tipo == 2 and low  <= stop_loss_price))
+tp_hit = trade_open and bar_index != entry_bar and not sl_hit and
+     ((trade_tipo == 1 and low  <= take_profit_price) or
+      (trade_tipo == 2 and high >= take_profit_price))
+
+// ═══════════════════════════════════════════════════════════════
+// ESTADÍSTICAS
+// ═══════════════════════════════════════════════════════════════
+var int   total_tp_count      = 0
+var int   total_sl_count      = 0
+var int   total_closed_trades = 0
+var float total_profit_pct    = 0.0
+var float total_loss_pct      = 0.0
+var float total_net_pct       = 0.0
+var float equity_pct          = 0.0
+var float equity_peak_pct     = 0.0
+var float max_drawdown_pct    = 0.0
+var float compound_capital    = na
+
+if barstate.isfirst
+    compound_capital := initial_capital
+    simple_capital   := initial_capital
+
+if sl_hit
+    trade_open          := false
+    entry_price         := na
+    stop_loss_price     := na
+    take_profit_price   := na
+    trade_result        := "SL ❌"
+    total_sl_count      += 1
+    total_closed_trades += 1
+    total_loss_pct      += trade_eff_sl_pct
+    total_net_pct       := total_profit_pct - total_loss_pct
+    equity_pct          -= trade_eff_sl_pct
+    equity_peak_pct     := math.max(equity_peak_pct, equity_pct)
+    max_drawdown_pct    := math.max(max_drawdown_pct, equity_peak_pct - equity_pct)
+    simple_capital      := initial_capital * (1 + total_net_pct / 100)
+    compound_capital    := compound_capital * (1 - trade_eff_sl_pct / 100)
+
+else if tp_hit
+    trade_open          := false
+    entry_price         := na
+    stop_loss_price     := na
+    take_profit_price   := na
+    trade_result        := "TP ✅"
+    total_tp_count      += 1
+    total_closed_trades += 1
+    total_profit_pct    += trade_eff_tp_pct
+    total_net_pct       := total_profit_pct - total_loss_pct
+    equity_pct          += trade_eff_tp_pct
+    equity_peak_pct     := math.max(equity_peak_pct, equity_pct)
+    max_drawdown_pct    := math.max(max_drawdown_pct, equity_peak_pct - equity_pct)
+    simple_capital      := initial_capital * (1 + total_net_pct / 100)
+    compound_capital    := compound_capital * (1 + trade_eff_tp_pct / 100)
+
+win_rate = total_closed_trades > 0 ? (total_tp_count / total_closed_trades) * 100 : 0.0
+
+// ═══════════════════════════════════════════════════════════════
+// VISUALES — EMAs
+// ═══════════════════════════════════════════════════════════════
+plot(show_ema_lines ? ema1  : na, "EMA C1",  color=color.new(color.orange,  0), linewidth=1)
+plot(show_ema_lines and use_c2  ? ema2  : na, "EMA C2",  color=color.new(color.purple,  0), linewidth=1)
+plot(show_ema_lines and use_c3  ? ema3  : na, "EMA C3",  color=color.new(color.teal,    0), linewidth=1)
+plot(show_ema_lines and use_c4  ? ema4  : na, "EMA C4",  color=color.new(color.blue,    0), linewidth=1)
+plot(show_ema_lines and use_c5  ? ema5  : na, "EMA C5",  color=color.new(color.fuchsia, 0), linewidth=1)
+plot(show_ema_lines and use_c6  ? ema6  : na, "EMA C6",  color=color.new(color.lime,    0), linewidth=1)
+plot(show_ema_lines and use_c7  ? ema7  : na, "EMA C7",  color=color.new(color.yellow,  0), linewidth=1)
+plot(show_ema_lines and use_c8  ? ema8  : na, "EMA C8",  color=color.new(color.aqua,    0), linewidth=1)
+plot(show_ema_lines and use_c9  ? ema9  : na, "EMA C9",  color=color.new(color.maroon,  0), linewidth=1)
+plot(show_ema_lines and use_c10 ? ema10 : na, "EMA C10", color=color.new(color.silver,  0), linewidth=1)
+plot(show_ema_lines and use_c11 ? ema11 : na, "EMA C11", color=color.new(color.navy,    0), linewidth=1)
+plot(show_ema_lines and use_c12 ? ema12 : na, "EMA C12", color=color.new(color.olive,   0), linewidth=1)
+plot(show_ema_lines and use_c13 ? ema13 : na, "EMA C13", color=color.new(color.gray,    0), linewidth=1)
+plot(show_ema_lines and use_slow_filter ? slow_ema_val : na, "EMA Lenta", color=color.new(color.white, 40), linewidth=2, style=plot.style_line)
+
+// ── Señales SHORT (flecha abajo, arriba de la barra) ─────────
+plotshape(show_signal_marks and op_s1,  title="SHORT C1",  style=shape.labeldown, location=location.abovebar, color=color.orange,                   textcolor=color.white, size=size.tiny, text="C1▼")
+plotshape(show_signal_marks and op_s2,  title="SHORT C2",  style=shape.labeldown, location=location.abovebar, color=color.new(color.purple,  0),    textcolor=color.white, size=size.tiny, text="C2▼")
+plotshape(show_signal_marks and op_s3,  title="SHORT C3",  style=shape.labeldown, location=location.abovebar, color=color.new(color.teal,    0),    textcolor=color.white, size=size.tiny, text="C3▼")
+plotshape(show_signal_marks and op_s4,  title="SHORT C4",  style=shape.labeldown, location=location.abovebar, color=color.new(color.blue,    0),    textcolor=color.white, size=size.tiny, text="C4▼")
+plotshape(show_signal_marks and op_s5,  title="SHORT C5",  style=shape.labeldown, location=location.abovebar, color=color.new(color.fuchsia, 0),    textcolor=color.white, size=size.tiny, text="C5▼")
+plotshape(show_signal_marks and op_s6,  title="SHORT C6",  style=shape.labeldown, location=location.abovebar, color=color.new(color.lime,    0),    textcolor=color.black, size=size.tiny, text="C6▼")
+plotshape(show_signal_marks and op_s7,  title="SHORT C7",  style=shape.labeldown, location=location.abovebar, color=color.new(color.yellow,  0),    textcolor=color.black, size=size.tiny, text="C7▼")
+plotshape(show_signal_marks and op_s8,  title="SHORT C8",  style=shape.labeldown, location=location.abovebar, color=color.new(color.aqua,    0),    textcolor=color.black, size=size.tiny, text="C8▼")
+plotshape(show_signal_marks and op_s9,  title="SHORT C9",  style=shape.labeldown, location=location.abovebar, color=color.new(color.maroon,  0),    textcolor=color.white, size=size.tiny, text="C9▼")
+plotshape(show_signal_marks and op_s10, title="SHORT C10", style=shape.labeldown, location=location.abovebar, color=color.new(color.silver,  0),    textcolor=color.black, size=size.tiny, text="C10▼")
+plotshape(show_signal_marks and op_s11, title="SHORT C11", style=shape.labeldown, location=location.abovebar, color=color.new(color.navy,    0),    textcolor=color.white, size=size.tiny, text="C11▼")
+plotshape(show_signal_marks and op_s12, title="SHORT C12", style=shape.labeldown, location=location.abovebar, color=color.new(color.olive,   0),    textcolor=color.white, size=size.tiny, text="C12▼")
+plotshape(show_signal_marks and op_s13, title="SHORT C13", style=shape.labeldown, location=location.abovebar, color=color.new(color.gray,    0),    textcolor=color.white, size=size.tiny, text="C13▼")
+
+// ── Señales LONG (flecha arriba, debajo de la barra) ─────────
+plotshape(show_signal_marks and op_l1,  title="LONG C1",  style=shape.labelup, location=location.belowbar, color=color.orange,                   textcolor=color.white, size=size.tiny, text="C1▲")
+plotshape(show_signal_marks and op_l2,  title="LONG C2",  style=shape.labelup, location=location.belowbar, color=color.new(color.purple,  0),    textcolor=color.white, size=size.tiny, text="C2▲")
+plotshape(show_signal_marks and op_l3,  title="LONG C3",  style=shape.labelup, location=location.belowbar, color=color.new(color.teal,    0),    textcolor=color.white, size=size.tiny, text="C3▲")
+plotshape(show_signal_marks and op_l4,  title="LONG C4",  style=shape.labelup, location=location.belowbar, color=color.new(color.blue,    0),    textcolor=color.white, size=size.tiny, text="C4▲")
+plotshape(show_signal_marks and op_l5,  title="LONG C5",  style=shape.labelup, location=location.belowbar, color=color.new(color.fuchsia, 0),    textcolor=color.white, size=size.tiny, text="C5▲")
+plotshape(show_signal_marks and op_l6,  title="LONG C6",  style=shape.labelup, location=location.belowbar, color=color.new(color.lime,    0),    textcolor=color.black, size=size.tiny, text="C6▲")
+plotshape(show_signal_marks and op_l7,  title="LONG C7",  style=shape.labelup, location=location.belowbar, color=color.new(color.yellow,  0),    textcolor=color.black, size=size.tiny, text="C7▲")
+plotshape(show_signal_marks and op_l8,  title="LONG C8",  style=shape.labelup, location=location.belowbar, color=color.new(color.aqua,    0),    textcolor=color.black, size=size.tiny, text="C8▲")
+plotshape(show_signal_marks and op_l9,  title="LONG C9",  style=shape.labelup, location=location.belowbar, color=color.new(color.maroon,  0),    textcolor=color.white, size=size.tiny, text="C9▲")
+plotshape(show_signal_marks and op_l10, title="LONG C10", style=shape.labelup, location=location.belowbar, color=color.new(color.silver,  0),    textcolor=color.black, size=size.tiny, text="C10▲")
+plotshape(show_signal_marks and op_l11, title="LONG C11", style=shape.labelup, location=location.belowbar, color=color.new(color.navy,    0),    textcolor=color.white, size=size.tiny, text="C11▲")
+plotshape(show_signal_marks and op_l12, title="LONG C12", style=shape.labelup, location=location.belowbar, color=color.new(color.olive,   0),    textcolor=color.white, size=size.tiny, text="C12▲")
+plotshape(show_signal_marks and op_l13, title="LONG C13", style=shape.labelup, location=location.belowbar, color=color.new(color.gray,    0),    textcolor=color.white, size=size.tiny, text="C13▲")
+
+// ── Líneas de trade activo ────────────────────────────────────
+plot(show_trade_lines and not na(entry_price)       ? entry_price       : na, "Entrada",    color=color.yellow, linewidth=2, style=plot.style_linebr)
+plot(show_trade_lines and not na(stop_loss_price)   ? stop_loss_price   : na, "Stop Loss",  color=color.red,    linewidth=2, style=plot.style_linebr)
+plot(show_trade_lines and not na(take_profit_price) ? take_profit_price : na, "Take Profit",color=color.lime,   linewidth=2, style=plot.style_linebr)
+
+plotshape(tp_hit, title="TP alcanzado", style=shape.labelup,   location=location.belowbar, color=color.lime, textcolor=color.black, size=size.small, text="TP")
+plotshape(sl_hit, title="SL alcanzado", style=shape.labeldown, location=location.abovebar, color=color.red,  textcolor=color.white, size=size.small, text="SL")
+
+// ═══════════════════════════════════════════════════════════════
+// TABLAS
+// ═══════════════════════════════════════════════════════════════
+combos_active = 1 + (use_c2?1:0) + (use_c3?1:0) + (use_c4?1:0) + (use_c5?1:0) + (use_c6?1:0) + (use_c7?1:0) + (use_c8?1:0) + (use_c9?1:0) + (use_c10?1:0) + (use_c11?1:0) + (use_c12?1:0) + (use_c13?1:0)
+
+var table info_panel  = table.new(position.bottom_right, 2, 11, bgcolor=color.new(color.black, 60))
+var table stats_panel = table.new(position.top_center,   2, 11, bgcolor=color.new(color.black, 60))
+
+if barstate.islast
+    ema1_dist = ema1 > 0 ? (close - ema1) / ema1 * 100 : 0.0
+    trend_str  = bear1 ? "BAJISTA 🔴" : "ALCISTA 🟢"
+    trend_col  = bear1 ? color.red : color.green
+
+    signal_text =
+         final_signal_1  ? "C1 — señal 🟠" :
+         final_signal_2  ? "C2 — señal 🟣" :
+         final_signal_3  ? "C3 — señal 🔵" :
+         final_signal_4  ? "C4 — señal 💙" :
+         final_signal_5  ? "C5 — señal 🟤" :
+         final_signal_6  ? "C6 — señal 🟢" :
+         final_signal_7  ? "C7 — señal 🟡" :
+         final_signal_8  ? "C8 — señal 💧" :
+         final_signal_9  ? "C9 — señal 🟥" :
+         final_signal_10 ? "C10 — señal ⚪" :
+         final_signal_11 ? "C11 — señal 🌑" :
+         final_signal_12 ? "C12 — señal 🫒" :
+         final_signal_13 ? "C13 — señal ⚫" :
+         "Sin señal"
+
+    net_col = total_net_pct >= 0 ? color.green : color.red
+    dd_col  = max_drawdown_pct > 0 ? color.orange : color.gray
+
+    table.cell(info_panel, 0, 0,  "EMA C1 (per " + str.tostring(ema_per1) + ")", text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 0,  str.tostring(ema1, "#.##"),                    text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 0, 1,  "Distancia EMA C1",                            text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 1,  str.tostring(ema1_dist, "#.##") + "%",         text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 0, 2,  "Tendencia C1",                                text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 2,  trend_str,                                      text_color=color.white, bgcolor=trend_col, text_size=size.small)
+    table.cell(info_panel, 0, 3,  "Mecha Superior",                              text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 3,  str.tostring(upper_wick_pct, "#.##") + "%",    text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 0, 4,  "Mecha Inferior",                              text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 4,  str.tostring(lower_wick_pct, "#.##") + "%",    text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 0, 5,  "Dirección",                                   text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 5,  direction_input,                                text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 0, 6,  "Combos activos",                              text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 6,  str.tostring(combos_active),                    text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 0, 7,  "Señal actual",                                text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 7,  signal_text,                                    text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 0, 8,  "Entrada",                                     text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 8,  na(entry_price) ? "-" : str.tostring(entry_price, "#.##"), text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 0, 9,  "SL / TP",                                    text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 9,  (na(stop_loss_price) or na(take_profit_price)) ? "-" : str.tostring(stop_loss_price,"#.##") + " / " + str.tostring(take_profit_price,"#.##"), text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 0, 10, "Resultado",                                   text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 10, trade_result,                                   text_color=color.white, text_size=size.small)
+
+    table.cell(stats_panel, 0, 0,  "TP cerrados",                               text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 0,  str.tostring(total_tp_count),                 text_color=color.white, bgcolor=color.new(color.green, 60), text_size=size.small)
+    table.cell(stats_panel, 0, 1,  "SL cerrados",                               text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 1,  str.tostring(total_sl_count),                 text_color=color.white, bgcolor=color.new(color.red,   60), text_size=size.small)
+    table.cell(stats_panel, 0, 2,  "Trades cerrados",                           text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 2,  str.tostring(total_closed_trades),            text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 0, 3,  "Ganancia acum. x" + str.tostring(leverage,"#"), text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 3,  str.tostring(total_profit_pct,"#.##") + "%", text_color=color.white, bgcolor=color.new(color.green, 70), text_size=size.small)
+    table.cell(stats_panel, 0, 4,  "Pérdida acum. x" + str.tostring(leverage,"#"),  text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 4,  str.tostring(total_loss_pct,"#.##") + "%",   text_color=color.white, bgcolor=color.new(color.red,   70), text_size=size.small)
+    table.cell(stats_panel, 0, 5,  "Neto x" + str.tostring(leverage,"#"),       text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 5,  str.tostring(total_net_pct,"#.##") + "%",    text_color=color.white, bgcolor=net_col, text_size=size.small)
+    table.cell(stats_panel, 0, 6,  "Win Rate",                                  text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 6,  str.tostring(win_rate,"#.##") + "%",         text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 0, 7,  "Máx. caída",                                text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 7,  str.tostring(max_drawdown_pct,"#.##") + "%", text_color=color.white, bgcolor=dd_col, text_size=size.small)
+    table.cell(stats_panel, 0, 8,  "Capital simple",                            text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 8,  "$" + str.tostring(simple_capital,"#.##"),   text_color=color.white, bgcolor=color.new(color.gray, 70), text_size=size.small)
+    table.cell(stats_panel, 0, 9,  "Capital compuesto",                         text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 9,  "$" + str.tostring(compound_capital,"#.##"), text_color=color.white, bgcolor=color.new(color.blue, 75), text_size=size.small)
+    table.cell(stats_panel, 0, 10, "Mejor método",                              text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 10, compound_capital > simple_capital ? "Compuesto" : simple_capital > compound_capital ? "Simple" : "Iguales", text_color=color.white, text_size=size.small)
+
+// ═══════════════════════════════════════════════════════════════
+// ALERTAS
+// ═══════════════════════════════════════════════════════════════
+alertcondition(final_any_signal, "Señal EMA Touch (cualquier combo)", "EMA Touch: señal del día disparada")
+alertcondition(final_signal_1,   "Señal C1 — EMA Touch",  "Combo 1 disparó señal EMA Touch")
+alertcondition(final_signal_2,   "Señal C2 — EMA Touch",  "Combo 2 disparó señal EMA Touch")
+alertcondition(final_signal_3,   "Señal C3 — EMA Touch",  "Combo 3 disparó señal EMA Touch")
+alertcondition(final_signal_4,   "Señal C4 — EMA Touch",  "Combo 4 disparó señal EMA Touch")
+alertcondition(final_signal_5,   "Señal C5 — EMA Touch",  "Combo 5 disparó señal EMA Touch")
+alertcondition(final_signal_6,   "Señal C6 — EMA Touch",  "Combo 6 disparó señal EMA Touch")
+alertcondition(final_signal_7,   "Señal C7 — EMA Touch",  "Combo 7 disparó señal EMA Touch")
+alertcondition(final_signal_8,   "Señal C8 — EMA Touch",  "Combo 8 disparó señal EMA Touch")
+alertcondition(final_signal_9,   "Señal C9 — EMA Touch",  "Combo 9 disparó señal EMA Touch")
+alertcondition(final_signal_10,  "Señal C10 — EMA Touch", "Combo 10 disparó señal EMA Touch")
+alertcondition(final_signal_11,  "Señal C11 — EMA Touch", "Combo 11 disparó señal EMA Touch")
+alertcondition(final_signal_12,  "Señal C12 — EMA Touch", "Combo 12 disparó señal EMA Touch")
+alertcondition(final_signal_13,  "Señal C13 — EMA Touch", "Combo 13 disparó señal EMA Touch")
+alertcondition(tp_hit,           "TP alcanzado — EMA Touch", "EMA Touch: Take Profit alcanzado")
+alertcondition(sl_hit,           "SL alcanzado — EMA Touch", "EMA Touch: Stop Loss alcanzado")
+
+// Alerta dinámica JSON → webhook
+active_account =
+     combos_active == 13 ? account_13 :
+     combos_active == 12 ? account_12 :
+     combos_active == 11 ? account_11 :
+     combos_active == 10 ? account_10 :
+     combos_active == 9  ? account_9  :
+     combos_active == 8  ? account_8  :
+     combos_active == 7  ? account_7  :
+     combos_active == 6  ? account_6  :
+     combos_active == 5  ? account_5  :
+     combos_active == 4  ? account_4  :
+     combos_active == 3  ? account_3  :
+     combos_active == 2  ? account_2  :
+                           account_1
+
+if final_any_signal
+    _tipo_str = (trade_tipo == 1) ? "R" : "S"
+    _tp = final_signal_1  ? tp_pct1  : final_signal_2  ? tp_pct2  : final_signal_3  ? tp_pct3  :
+          final_signal_4  ? tp_pct4  : final_signal_5  ? tp_pct5  : final_signal_6  ? tp_pct6  :
+          final_signal_7  ? tp_pct7  : final_signal_8  ? tp_pct8  : final_signal_9  ? tp_pct9  :
+          final_signal_10 ? tp_pct10 : final_signal_11 ? tp_pct11 : final_signal_12 ? tp_pct12 : tp_pct13
+    _sl = final_signal_1  ? sl_pct1  : final_signal_2  ? sl_pct2  : final_signal_3  ? sl_pct3  :
+          final_signal_4  ? sl_pct4  : final_signal_5  ? sl_pct5  : final_signal_6  ? sl_pct6  :
+          final_signal_7  ? sl_pct7  : final_signal_8  ? sl_pct8  : final_signal_9  ? sl_pct9  :
+          final_signal_10 ? sl_pct10 : final_signal_11 ? sl_pct11 : final_signal_12 ? sl_pct12 : sl_pct13
+    alert('{"secret":"TestAndres","account":"' + active_account + '","tipo":"' + _tipo_str + '","tp":' + str.tostring(_tp) + ',"sl":' + str.tostring(_sl) + '}', alert.freq_once_per_bar_close)
