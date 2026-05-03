@@ -1,0 +1,367 @@
+//@version=5
+indicator("BTC Rango Dinámico + Toque con Mecha (Estrategia)", overlay=true)
+
+// --- 1. CONFIGURACIÓN DEL RANGO ---
+grp_params = "Configuración del Rango"
+min_range_pct    = input.float(0.6,  "Tamaño Mínimo (%)", minval=0.1, step=0.1, tooltip="% mínimo de compresión del rango", group=grp_params)
+max_range_pct    = input.float(1.2,  "Tamaño Máximo (%)", minval=0.1, step=0.1, tooltip="% máximo de compresión del rango", group=grp_params)
+lookback_candles = input.int(20,     "Velas hacia atrás",  minval=1,  tooltip="Cuántas velas analizamos para definir el rango", group=grp_params)
+min_wick_pct     = input.float(15.0, "Mecha mínima (%)",  minval=0.1, step=0.1, tooltip="% mínimo de mecha respecto al rango total de la vela", group=grp_params)
+
+// --- 2. CONFIGURACIÓN HORARIA ---
+grp_time = "Horario Colombia"
+use_time_filter = input.bool(true,   "Activar filtro horario", group=grp_time)
+session_1       = input.session("1630-1800", "Franja 1", group=grp_time)
+session_2       = input.session("2300-0500", "Franja 2", group=grp_time)
+
+colombia_tz   = "America/Bogota"
+in_session_1  = not na(time(timeframe.period, session_1, colombia_tz))
+in_session_2  = not na(time(timeframe.period, session_2, colombia_tz))
+is_allowed_time = not use_time_filter or in_session_1 or in_session_2
+
+// --- 3. NIVELES MANUALES ---
+grp_levels  = "Tus Niveles del Día"
+show_levels = input.bool(true, "Mostrar niveles en el gráfico", group=grp_levels)
+res1        = input.float(0.0, "Resistencia 1", group=grp_levels)
+res2        = input.float(0.0, "Resistencia 2", group=grp_levels)
+res3        = input.float(0.0, "Resistencia 3", group=grp_levels)
+sup1        = input.float(0.0, "Soporte 1", group=grp_levels)
+sup2        = input.float(0.0, "Soporte 2", group=grp_levels)
+sup3        = input.float(0.0, "Soporte 3", group=grp_levels)
+
+// --- 4. CONFIGURACIÓN DE TRADE ---
+grp_trade       = "Configuración de Trade"
+sl_buffer_pct   = input.float(0.05,   "Buffer SL sobre High/bajo Low (%)", minval=0.01, step=0.01, tooltip="% adicional sobre el High de la vela señal (SHORT) o bajo el Low (LONG) para colocar el SL", group=grp_trade)
+tp_pct          = input.float(1.0,    "TP (%)",                             minval=0.01, step=0.01, tooltip="% de ganancia desde precio de entrada", group=grp_trade)
+fee_sl_pct      = input.float(0.10,   "Fee extra SL (%)",                   minval=0.0,  step=0.01, group=grp_trade)
+fee_tp_pct      = input.float(0.05,   "Fee descontado TP (%)",              minval=0.0,  step=0.01, group=grp_trade)
+leverage        = input.float(10.0,   "Apalancamiento estadísticas",        minval=1.0,  step=1.0,  group=grp_trade)
+initial_capital = input.float(1000.0, "Capital inicial interés compuesto",  minval=1.0,  step=1.0,  group=grp_trade)
+
+// --- 5. APARIENCIA ---
+grp_visual        = "Apariencia"
+range_color       = input.color(color.new(color.gray, 85),   "Color de Zona Rango",       group=grp_visual)
+line_color        = input.color(color.new(color.orange, 0),  "Color de Líneas Techo/Piso", group=grp_visual)
+show_range_lines  = input.bool(true,  "Mostrar techo/piso del rango",  group=grp_visual)
+show_signal_marks = input.bool(true,  "Mostrar marcas de señal",       group=grp_visual)
+show_trade_lines  = input.bool(true,  "Mostrar líneas TP/SL/Entrada",  group=grp_visual)
+res_signal_color  = input.color(color.red,  "Color señal SHORT", group=grp_visual)
+sup_signal_color  = input.color(color.lime, "Color señal LONG",  group=grp_visual)
+
+// =============================================================================
+// CÁLCULOS DEL RANGO
+// =============================================================================
+highest_price     = ta.highest(high, lookback_candles)
+lowest_price      = ta.lowest(low,   lookback_candles)
+current_range_usd = highest_price - lowest_price
+current_range_pct = close != 0 ? (current_range_usd / close) * 100 : 0.0
+
+is_tight_range    = min_range_pct <= max_range_pct and is_allowed_time and current_range_pct >= min_range_pct and current_range_pct <= max_range_pct
+new_range_started = is_tight_range and not is_tight_range[1]
+
+// --- MECHAS ---
+candle_range   = high - low
+upper_wick     = high - math.max(open, close)
+lower_wick     = math.min(open, close) - low
+upper_wick_pct = candle_range > 0 ? (upper_wick / candle_range) * 100 : 0.0
+lower_wick_pct = candle_range > 0 ? (lower_wick / candle_range) * 100 : 0.0
+
+// --- FUNCIONES NIVEL MANUAL ---
+is_resistance_touch_with_wick(level) =>
+    level > 0 and high >= level and candle_range > 0 and upper_wick_pct >= min_wick_pct
+
+is_support_touch_with_wick(level) =>
+    level > 0 and low <= level and candle_range > 0 and lower_wick_pct >= min_wick_pct
+
+resistance_signal =
+     is_resistance_touch_with_wick(res1) or
+     is_resistance_touch_with_wick(res2) or
+     is_resistance_touch_with_wick(res3)
+
+support_signal =
+     is_support_touch_with_wick(sup1) or
+     is_support_touch_with_wick(sup2) or
+     is_support_touch_with_wick(sup3)
+
+alert_trigger    = (resistance_signal or support_signal) and is_tight_range
+resistance_alert = resistance_signal and is_tight_range
+support_alert    = support_signal    and is_tight_range
+
+// =============================================================================
+// RANGO ACTIVO + PRIMER TOQUE
+// =============================================================================
+var float active_range_top    = na
+var float active_range_bottom = na
+var bool  first_range_touch_done = false
+
+if new_range_started
+    active_range_top         := highest_price
+    active_range_bottom      := lowest_price
+    first_range_touch_done   := false
+
+if not is_tight_range
+    active_range_top         := na
+    active_range_bottom      := na
+    first_range_touch_done   := false
+
+touch_range_top    = is_tight_range and not first_range_touch_done and not na(active_range_top)    and high >= active_range_top    and candle_range > 0 and upper_wick_pct >= min_wick_pct
+touch_range_bottom = is_tight_range and not first_range_touch_done and not na(active_range_bottom) and low  <= active_range_bottom and candle_range > 0 and lower_wick_pct >= min_wick_pct
+
+raw_resistance_signal = touch_range_top
+raw_support_signal    = touch_range_bottom
+
+// =============================================================================
+// LÍMITE DE 1 TRADE POR DÍA (UTC)
+// =============================================================================
+new_day_utc = ta.change(time("D", "0000-0000", "UTC")) != 0
+
+var bool daily_signal_used = false
+
+if new_day_utc
+    daily_signal_used := false
+
+can_fire_now = not daily_signal_used
+
+final_resistance_signal = raw_resistance_signal and can_fire_now
+final_support_signal    = raw_support_signal    and can_fire_now and not final_resistance_signal
+final_any_signal        = final_resistance_signal or final_support_signal
+
+if final_any_signal
+    daily_signal_used      := true
+    first_range_touch_done := true
+
+// =============================================================================
+// TRADE — estado único
+// Entry: close de la vela señal
+// SL SHORT: high * (1 + buffer%)  →  un poco arriba de la mecha superior
+// SL LONG:  low  * (1 - buffer%)  →  un poco abajo  de la mecha inferior
+// TP:       % fijo desde el cierre
+// =============================================================================
+var float entry_price       = na
+var float stop_loss_price   = na
+var float take_profit_price = na
+var bool  trade_open        = false
+var int   trade_tipo        = 0
+var int   entry_bar         = na
+var string trade_result     = "Sin trade"
+var float trade_eff_tp_pct  = 0.0
+var float trade_eff_sl_pct  = 0.0
+var float simple_capital    = na
+var float compound_capital  = na
+
+if barstate.isfirst
+    simple_capital   := initial_capital
+    compound_capital := initial_capital
+
+if final_resistance_signal and not trade_open
+    _sl         = high * (1 + sl_buffer_pct / 100)
+    _sl_raw_pct = (_sl - close) / close * 100
+    entry_price       := close
+    stop_loss_price   := _sl
+    take_profit_price := close * (1 - tp_pct / 100)
+    trade_eff_tp_pct  := math.max(tp_pct - fee_tp_pct, 0) * leverage
+    trade_eff_sl_pct  := (_sl_raw_pct + fee_sl_pct) * leverage
+    trade_open        := true
+    trade_tipo        := 1
+    entry_bar         := bar_index
+    trade_result      := "Abierto SHORT"
+
+if final_support_signal and not trade_open
+    _sl         = low * (1 - sl_buffer_pct / 100)
+    _sl_raw_pct = (close - _sl) / close * 100
+    entry_price       := close
+    stop_loss_price   := _sl
+    take_profit_price := close * (1 + tp_pct / 100)
+    trade_eff_tp_pct  := math.max(tp_pct - fee_tp_pct, 0) * leverage
+    trade_eff_sl_pct  := (_sl_raw_pct + fee_sl_pct) * leverage
+    trade_open        := true
+    trade_tipo        := 2
+    entry_bar         := bar_index
+    trade_result      := "Abierto LONG"
+
+// TP/SL evaluados desde la vela SIGUIENTE a la entrada
+tp_hit_short = trade_open and trade_tipo == 1 and bar_index != entry_bar and low  <= take_profit_price
+tp_hit_long  = trade_open and trade_tipo == 2 and bar_index != entry_bar and high >= take_profit_price
+sl_hit_short = trade_open and trade_tipo == 1 and bar_index != entry_bar and high >= stop_loss_price
+sl_hit_long  = trade_open and trade_tipo == 2 and bar_index != entry_bar and low  <= stop_loss_price
+
+tp_hit = tp_hit_short or tp_hit_long
+sl_hit = sl_hit_short or sl_hit_long
+
+// =============================================================================
+// ESTADÍSTICAS
+// =============================================================================
+var int   total_tp_count      = 0
+var int   total_sl_count      = 0
+var int   total_closed_trades = 0
+var float total_profit_pct    = 0.0
+var float total_loss_pct      = 0.0
+var float total_net_pct       = 0.0
+var float equity_pct          = 0.0
+var float equity_peak_pct     = 0.0
+var float max_drawdown_pct    = 0.0
+
+if tp_hit
+    trade_open          := false
+    entry_price         := na
+    stop_loss_price     := na
+    take_profit_price   := na
+    trade_result        := "TP ✅"
+    total_tp_count      += 1
+    total_closed_trades += 1
+    total_profit_pct    += trade_eff_tp_pct
+    total_net_pct       := total_profit_pct - total_loss_pct
+    equity_pct          += trade_eff_tp_pct
+    equity_peak_pct     := math.max(equity_peak_pct, equity_pct)
+    max_drawdown_pct    := math.max(max_drawdown_pct, equity_peak_pct - equity_pct)
+    simple_capital      := initial_capital * (1 + total_net_pct / 100)
+    compound_capital    := compound_capital * (1 + trade_eff_tp_pct / 100)
+
+else if sl_hit
+    trade_open          := false
+    entry_price         := na
+    stop_loss_price     := na
+    take_profit_price   := na
+    trade_result        := "SL ❌"
+    total_sl_count      += 1
+    total_closed_trades += 1
+    total_loss_pct      += trade_eff_sl_pct
+    total_net_pct       := total_profit_pct - total_loss_pct
+    equity_pct          -= trade_eff_sl_pct
+    equity_peak_pct     := math.max(equity_peak_pct, equity_pct)
+    max_drawdown_pct    := math.max(max_drawdown_pct, equity_peak_pct - equity_pct)
+    simple_capital      := initial_capital * (1 + total_net_pct / 100)
+    compound_capital    := compound_capital * (1 - trade_eff_sl_pct / 100)
+
+win_rate = total_closed_trades > 0 ? (total_tp_count / total_closed_trades) * 100 : 0.0
+
+// =============================================================================
+// VISUALES
+// =============================================================================
+bgcolor(is_tight_range ? range_color : na, title="Fondo Rango")
+
+plot(show_range_lines and is_tight_range ? active_range_top    : na, "Techo del Rango", color=line_color, linewidth=1, style=plot.style_linebr)
+plot(show_range_lines and is_tight_range ? active_range_bottom : na, "Piso del Rango",  color=line_color, linewidth=1, style=plot.style_linebr)
+
+plot(show_levels and res1 > 0 ? res1 : na, "R1", color=color.red,   style=plot.style_linebr)
+plot(show_levels and res2 > 0 ? res2 : na, "R2", color=color.red,   style=plot.style_linebr)
+plot(show_levels and res3 > 0 ? res3 : na, "R3", color=color.red,   style=plot.style_linebr)
+plot(show_levels and sup1 > 0 ? sup1 : na, "S1", color=color.green, style=plot.style_linebr)
+plot(show_levels and sup2 > 0 ? sup2 : na, "S2", color=color.green, style=plot.style_linebr)
+plot(show_levels and sup3 > 0 ? sup3 : na, "S3", color=color.green, style=plot.style_linebr)
+
+plotshape(show_signal_marks and final_resistance_signal, title="Señal SHORT (techo rango)", style=shape.labeldown, location=location.abovebar, color=res_signal_color, textcolor=color.white, size=size.tiny, text="SHORT")
+plotshape(show_signal_marks and final_support_signal,    title="Señal LONG (piso rango)",   style=shape.labelup,   location=location.belowbar, color=sup_signal_color, textcolor=color.black, size=size.tiny, text="LONG")
+
+plot(show_trade_lines and not na(entry_price)       ? entry_price       : na, "Entrada",    color=color.yellow, linewidth=2, style=plot.style_linebr)
+plot(show_trade_lines and not na(stop_loss_price)   ? stop_loss_price   : na, "Stop Loss",  color=color.red,    linewidth=2, style=plot.style_linebr)
+plot(show_trade_lines and not na(take_profit_price) ? take_profit_price : na, "Take Profit",color=color.lime,   linewidth=2, style=plot.style_linebr)
+
+plotshape(tp_hit, title="TP alcanzado", style=shape.labelup,   location=location.belowbar, color=color.lime, textcolor=color.black, size=size.tiny, text="TP")
+plotshape(sl_hit, title="SL alcanzado", style=shape.labeldown, location=location.abovebar, color=color.red,  textcolor=color.white, size=size.tiny, text="SL")
+
+// =============================================================================
+// PANELES
+// =============================================================================
+var table info_panel  = table.new(position.bottom_right, 2, 12, bgcolor=color.new(color.black, 60))
+var table stats_panel = table.new(position.top_center,   2, 11, bgcolor=color.new(color.black, 60))
+
+if barstate.islast
+    state_text   = is_tight_range ? "SANO ✅" : "FUERA DE RANGO ❌"
+    val_col      = is_tight_range ? color.green : color.red
+    net_col      = total_net_pct >= 0 ? color.green : color.red
+    dd_col       = max_drawdown_pct > 0 ? color.orange : color.gray
+    session_text = use_time_filter ? (in_session_1 ? "Franja 1" : in_session_2 ? "Franja 2" : "Fuera horario") : "24 horas"
+
+    tipo_text    =
+         trade_tipo == 1 ? "SHORT 🔴" :
+         trade_tipo == 2 ? "LONG 🟢"  :
+         "-"
+
+    table.cell(info_panel, 0, 0,  "Rango (%)",       text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 0,  str.tostring(current_range_pct, "#.##") + "%", text_color=color.white, bgcolor=val_col, text_size=size.normal)
+
+    table.cell(info_panel, 0, 1,  "Rango válido",    text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 1,  str.tostring(min_range_pct, "#.##") + "% - " + str.tostring(max_range_pct, "#.##") + "%", text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 2,  "Estado",          text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 2,  state_text,         text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 3,  "Mecha Superior",  text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 3,  str.tostring(upper_wick_pct, "#.##") + "%", text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 4,  "Mecha Inferior",  text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 4,  str.tostring(lower_wick_pct, "#.##") + "%", text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 5,  "Horario",         text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 5,  session_text,       text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 6,  "Tipo trade",      text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 6,  tipo_text,          text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 7,  "Entrada",         text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 7,  na(entry_price) ? "-" : str.tostring(entry_price, "#.##"), text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 8,  "SL",              text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 8,  na(stop_loss_price) ? "-" : str.tostring(stop_loss_price, "#.##"), text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 9,  "TP",              text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 9,  na(take_profit_price) ? "-" : str.tostring(take_profit_price, "#.##"), text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 10, "SL buffer (%)",   text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 10, str.tostring(sl_buffer_pct, "#.##") + "%", text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 11, "Resultado",       text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 11, trade_result,       text_color=color.white, text_size=size.small)
+
+    table.cell(stats_panel, 0, 0,  "TP cerrados",    text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 0,  str.tostring(total_tp_count), text_color=color.white, bgcolor=color.new(color.green, 60), text_size=size.small)
+
+    table.cell(stats_panel, 0, 1,  "SL cerrados",    text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 1,  str.tostring(total_sl_count), text_color=color.white, bgcolor=color.new(color.red, 60), text_size=size.small)
+
+    table.cell(stats_panel, 0, 2,  "Trades cerrados",text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 2,  str.tostring(total_closed_trades), text_color=color.white, text_size=size.small)
+
+    table.cell(stats_panel, 0, 3,  "Ganancia acum. x" + str.tostring(leverage, "#"), text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 3,  str.tostring(total_profit_pct, "#.##") + "%", text_color=color.white, bgcolor=color.new(color.green, 70), text_size=size.small)
+
+    table.cell(stats_panel, 0, 4,  "Pérdida acum. x" + str.tostring(leverage, "#"), text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 4,  str.tostring(total_loss_pct, "#.##") + "%", text_color=color.white, bgcolor=color.new(color.red, 70), text_size=size.small)
+
+    table.cell(stats_panel, 0, 5,  "Neto simple x" + str.tostring(leverage, "#"), text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 5,  str.tostring(total_net_pct, "#.##") + "%", text_color=color.white, bgcolor=net_col, text_size=size.small)
+
+    table.cell(stats_panel, 0, 6,  "Win Rate",       text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 6,  str.tostring(win_rate, "#.##") + "%", text_color=color.white, text_size=size.small)
+
+    table.cell(stats_panel, 0, 7,  "Máx. caída",     text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 7,  str.tostring(max_drawdown_pct, "#.##") + "%", text_color=color.white, bgcolor=dd_col, text_size=size.small)
+
+    table.cell(stats_panel, 0, 8,  "Capital simple", text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 8,  "$" + str.tostring(simple_capital, "#.##"), text_color=color.white, bgcolor=color.new(color.gray, 70), text_size=size.small)
+
+    table.cell(stats_panel, 0, 9,  "Capital compuesto", text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 9,  "$" + str.tostring(compound_capital, "#.##"), text_color=color.white, bgcolor=color.new(color.blue, 75), text_size=size.small)
+
+    table.cell(stats_panel, 0, 10, "Mejor método",   text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 10, compound_capital > simple_capital ? "Compuesto" : simple_capital > compound_capital ? "Simple" : "Iguales", text_color=color.white, text_size=size.small)
+
+// =============================================================================
+// ALERTAS
+// =============================================================================
+alertcondition(alert_trigger,          "Nivel tocado con mecha en rango sano",  "El precio tocó un nivel manual con mecha mínima dentro del rango sano")
+alertcondition(resistance_alert,       "Toque en Resistencia Manual",            "Resistencia manual con mecha mínima en rango sano")
+alertcondition(support_alert,          "Toque en Soporte Manual",                "Soporte manual con mecha mínima en rango sano")
+alertcondition(is_tight_range and not is_tight_range[1], "Entrada en Rango",    "BTC ha entrado en zona de compresión")
+alertcondition(final_any_signal,       "Señal única por día",                    "Primera señal de techo/piso de rango válida del día")
+alertcondition(final_resistance_signal,"Señal SHORT — techo de rango",           "Primer toque del techo del rango — SHORT")
+alertcondition(final_support_signal,   "Señal LONG — piso de rango",             "Primer toque del piso del rango — LONG")
+alertcondition(tp_hit,                 "TP alcanzado",                           "El precio alcanzó el Take Profit")
+alertcondition(sl_hit,                 "SL alcanzado",                           "El precio alcanzó el Stop Loss")
+
+if final_any_signal
+    _tipo   = final_resistance_signal ? "R" : "S"
+    _sl_val = final_resistance_signal ? high * (1 + sl_buffer_pct / 100) : low * (1 - sl_buffer_pct / 100)
+    _sl_pct = final_resistance_signal ? (_sl_val - close) / close * 100 : (close - _sl_val) / close * 100
+    alert('{"secret":"TestAndres","tipo":"' + _tipo + '","tp":' + str.tostring(tp_pct) + ',"sl":' + str.tostring(_sl_pct, "#.####") + ',"sl_price":' + str.tostring(_sl_val, "#.##") + '}', alert.freq_once_per_bar_close)

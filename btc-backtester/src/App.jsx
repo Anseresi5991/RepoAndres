@@ -2,12 +2,13 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { createChart, CandlestickSeries, createSeriesMarkers, LineStyle } from 'lightweight-charts'
 import { runBacktest, runMultiBacktest } from './backtester.js'
 import { runSARBacktest } from './backtesterSAR.js'
-import { runSupertrendBacktest } from './backtesterSupertrend.js'
+import { runSupertrendBacktest, runMultiSupertrendBacktest } from './backtesterSupertrend.js'
 import { runConfluenceBacktest } from './backtesterConfluence.js'
 import { runEmaPullbackBacktest } from './backtesterEmaPullback.js'
 import { runPinBarBacktest } from './backtesterPinBar.js'
 import { runSoporteBacktest, runMultiSoporteBacktest } from './backtesterSoporte.js'
 import { runEmaTouchBacktest, runMultiEmaTouchBacktest } from './backtesterEma.js'
+import { runBacktest as runRangeHighBacktest, runMultiBacktest as runMultiRangeHighBacktest } from './backtesterRangeHigh.js'
 import * as XLSX from 'xlsx'
 import './App.css'
 
@@ -17,7 +18,8 @@ const isExcelOptimMode  = new URLSearchParams(window.location.search).get('mode'
 const isSarMode         = new URLSearchParams(window.location.search).get('strategy') === 'sar'
 const isSarOptimMode         = isSarMode && new URLSearchParams(window.location.search).get('mode') === 'optim'
 const isSupertrendMode       = new URLSearchParams(window.location.search).get('strategy') === 'supertrend'
-const isSupertrendOptimMode  = isSupertrendMode && new URLSearchParams(window.location.search).get('mode') === 'optim'
+const isSupertrendOptimMode      = isSupertrendMode && new URLSearchParams(window.location.search).get('mode') === 'optim'
+const isSupertrendExcelOptimMode = isSupertrendMode && new URLSearchParams(window.location.search).get('mode') === 'exceloptim'
 const isConfluenceMode       = new URLSearchParams(window.location.search).get('strategy') === 'confluence'
 const isConfluenceOptimMode  = isConfluenceMode && new URLSearchParams(window.location.search).get('mode') === 'optim'
 const isEmaPullbackMode      = new URLSearchParams(window.location.search).get('strategy') === 'emapullback'
@@ -31,6 +33,7 @@ const isPortfolioMode            = new URLSearchParams(window.location.search).g
 const isEmaMode                  = new URLSearchParams(window.location.search).get('strategy') === 'ema'
 const isEmaOptimMode             = isEmaMode && new URLSearchParams(window.location.search).get('mode') === 'optim'
 const isEmaExcelOptimMode        = isEmaMode && new URLSearchParams(window.location.search).get('mode') === 'exceloptim'
+const isRangeHighMode            = new URLSearchParams(window.location.search).get('strategy') === 'rangehigh'
 
 // ── Helpers para paralelizar el Análisis Profundo en múltiples workers ──
 function optRangeValues(min, max, step) {
@@ -162,20 +165,32 @@ const DEFAULT_OPTIM = {
 }
 
 const DEFAULT_SUPERTREND_PARAMS = {
-  atrPeriod:      10,
-  atrMultiplier:  3.0,
-  tpPct:          0.8,
-  slPct:          0.5,
-  feeTpPct:       0.05,
-  feeSlPct:       0.10,
-  leverage:       10,
-  initialCapital: 1000,
-  useTrendFilter: false,
-  pivotLr:        2,
-  tradeDirection: 'both',
-  skipSundays:    true,
-  dateFrom:       '2022-01-01',
-  dateTo:         new Date().toISOString().split('T')[0],
+  atrPeriod:          10,
+  atrMultiplier:      3.0,
+  tpPct:              0.8,
+  slPct:              0.5,
+  feeTpPct:           0.05,
+  feeSlPct:           0.10,
+  leverage:           10,
+  initialCapital:     1000,
+  useTrendFilter:     false,
+  pivotLr:            2,
+  tradeDirection:     'both',
+  skipSundays:        true,
+  emaFilterPeriod:    0,
+  maxConsecLosses:    0,
+  consecCooldownBars: 20,
+  adxPeriod:          14,
+  adxMinimum:         0,
+  slopeEmaPeriod:     0,
+  slopeLookback:      3,
+  atrVolFilter:       0,
+  atrVolPeriod:       20,
+  rsiPeriod:          14,
+  rsiThreshold:       0,
+  bodyRatioMin:       0,
+  dateFrom:           '2022-01-01',
+  dateTo:             new Date().toISOString().split('T')[0],
 }
 
 const DEFAULT_SUPERTREND_OPTIM = {
@@ -183,7 +198,30 @@ const DEFAULT_SUPERTREND_OPTIM = {
   atrMultiplier: { min: 1.0, max: 4.0, step: 0.5 },
   tpPct:         { min: 0.3, max: 1.5, step: 0.3 },
   slPct:         { min: 0.2, max: 1.0, step: 0.2 },
+  atrVolFilter:  { min: 0,   max: 2.0, step: 0.5 },
+  rsiThreshold:  { min: 0,   max: 70,  step: 35  },
+  bodyRatioMin:  { min: 0,   max: 0.4, step: 0.2 },
+  maxDdFilter:   20,
+  topN:          500,
 }
+
+const DEFAULT_SUPERTREND_MULTI_COMBOS = [
+  { atrPeriod:  8, atrMultiplier:  6.0, atrVolFilter: 1.5, rsiThreshold:  0, bodyRatioMin: 1.0, tpPct: 2.45, slPct: 2.6 },
+  { atrPeriod: 11, atrMultiplier:  5.0, atrVolFilter: 2.0, rsiThreshold:  0, bodyRatioMin: 1.0, tpPct: 1.25, slPct: 2.9 },
+  { atrPeriod: 14, atrMultiplier:  6.5, atrVolFilter: 1.0, rsiThreshold: 70, bodyRatioMin: 0.9, tpPct: 1.05, slPct: 2.9 },
+  { atrPeriod:  8, atrMultiplier:  3.5, atrVolFilter: 1.0, rsiThreshold: 60, bodyRatioMin: 0.8, tpPct: 0.45, slPct: 2.9 },
+  { atrPeriod: 17, atrMultiplier:  2.5, atrVolFilter: 0.0, rsiThreshold: 55, bodyRatioMin: 1.0, tpPct: 2.25, slPct: 2.1 },
+  { atrPeriod: 14, atrMultiplier:  3.5, atrVolFilter: 0.0, rsiThreshold: 50, bodyRatioMin: 0.8, tpPct: 2.95, slPct: 2.7 },
+  { atrPeriod:  8, atrMultiplier:  6.0, atrVolFilter: 1.0, rsiThreshold: 65, bodyRatioMin: 0.1, tpPct: 0.35, slPct: 2.4 },
+  { atrPeriod: 11, atrMultiplier:  1.0, atrVolFilter: 2.0, rsiThreshold: 25, bodyRatioMin: 0.3, tpPct: 1.05, slPct: 2.4 },
+  { atrPeriod:  8, atrMultiplier:  9.5, atrVolFilter: 1.0, rsiThreshold:  0, bodyRatioMin: 0.8, tpPct: 0.75, slPct: 2.8 },
+  { atrPeriod:  5, atrMultiplier:  6.5, atrVolFilter: 0.0, rsiThreshold:  0, bodyRatioMin: 1.0, tpPct: 2.65, slPct: 1.9 },
+  { atrPeriod: 14, atrMultiplier:  3.5, atrVolFilter: 0.0, rsiThreshold: 50, bodyRatioMin: 0.8, tpPct: 3.35, slPct: 2.9 },
+  { atrPeriod: 11, atrMultiplier:  1.5, atrVolFilter: 2.0, rsiThreshold: 30, bodyRatioMin: 0.0, tpPct: 1.65, slPct: 2.2 },
+  { atrPeriod: 14, atrMultiplier:  6.5, atrVolFilter: 1.0, rsiThreshold:  0, bodyRatioMin: 0.9, tpPct: 0.75, slPct: 2.9 },
+  { atrPeriod: 11, atrMultiplier:  7.5, atrVolFilter: 1.0, rsiThreshold: 70, bodyRatioMin: 0.8, tpPct: 0.75, slPct: 2.4 },
+  { atrPeriod:  5, atrMultiplier:  7.0, atrVolFilter: 1.0, rsiThreshold: 65, bodyRatioMin: 0.8, tpPct: 1.35, slPct: 2.8 },
+]
 
 const DEFAULT_CONFLUENCE_PARAMS = {
   emaFast:             21,
@@ -288,6 +326,26 @@ const DEFAULT_SOPORTE_PARAMS = {
   dateTo:              new Date().toISOString().split('T')[0],
 }
 
+const DEFAULT_RANGE_HIGH_PARAMS = {
+  minRangePct:         0.6,
+  maxRangePct:         1.2,
+  lookbackCandles:     20,
+  minWickPct:          15.0,
+  slBufferPct:         0.05,
+  tpPct:               1.0,
+  feeSlPct:            0.10,
+  feeTpPct:            0.05,
+  leverage:            10,
+  initialCapital:      1000,
+  monthlyContribution: 0,
+  dateFrom:            '2022-01-01',
+  dateTo:              new Date().toISOString().split('T')[0],
+}
+
+const DEFAULT_RANGE_HIGH_MULTI_COMBOS = [
+  { label: 'Combo 1', minRangePct: 0.6, maxRangePct: 1.2, lookbackCandles: 20, minWickPct: 15.0, slBufferPct: 0.05, tpPct: 1.0 },
+]
+
 const DEFAULT_SOPORTE_OPTIM = {
   minRangePct:     { min: 0.3, max: 1.5, step: 0.3 },
   maxRangePct:     { min: 0.8, max: 2.0, step: 0.3 },
@@ -313,7 +371,7 @@ function countConfluenceCombinations(optimRanges) {
 }
 
 function countSupertrendCombinations(optimRanges) {
-  return ['atrPeriod','atrMultiplier','tpPct','slPct']
+  return ['atrPeriod','atrMultiplier','tpPct','slPct','atrVolFilter','rsiThreshold','bodyRatioMin']
     .reduce((acc, k) => acc * rangeValues(optimRanges[k].min, optimRanges[k].max, optimRanges[k].step).length, 1)
 }
 
@@ -1108,12 +1166,51 @@ function SarOptimView() {
 }
 
 function SupertrendOptimView() {
-  const [status, setStatus] = useState('waiting')
+  const [status, setStatus]   = useState('waiting')
   const [progress, setProgress] = useState(null)
   const [ranking, setRanking] = useState([])
   const [errorMsg, setErrorMsg] = useState('')
-  const startTimeRef = useRef(null)
-  const bcRef = useRef(null)
+  const [maxDdFilter, setMaxDdFilter] = useState(20)
+
+  const startTimeRef    = useRef(null)
+  const bcRef           = useRef(null)
+  const workerRef       = useRef(null)
+  const initDataRef     = useRef(null)
+  const resumeOffsetRef = useRef(0)
+
+  const DEFAULT_COL_ORDER = ['score','atrPeriod','atrMultiplier','atrVolFilter','rsiThreshold','bodyRatioMin','tpPct','slPct','totalClosed','winRate','totalNetPct','maxDrawdownPct','compoundCapital']
+  const [colOrder, setColOrder] = useState(DEFAULT_COL_ORDER)
+  const dragColRef = useRef(null)
+
+  function launchWorker(candles, optimRanges, params, startOffset, initialRanking) {
+    if (workerRef.current) { workerRef.current.terminate() }
+    resumeOffsetRef.current = startOffset
+    startTimeRef.current    = Date.now()
+    const worker = new Worker(new URL('./supertrendOptimWorker.js', import.meta.url), { type: 'module' })
+    workerRef.current = worker
+    worker.onmessage = (ev) => {
+      const m = ev.data
+      if (m.type === 'progress') {
+        const elapsed  = Date.now() - startTimeRef.current
+        const newDone  = m.done - resumeOffsetRef.current
+        let eta = null
+        if (newDone >= 1 && elapsed >= 300) {
+          eta = Math.round((m.total - m.done) / (newDone / elapsed))
+        }
+        setProgress({ done: m.done, total: m.total, eta })
+        if (m.topResults?.length > 0) setRanking(m.topResults)
+      } else if (m.type === 'done') {
+        setStatus('done')
+        setProgress(p => p ? { ...p, done: p.total } : null)
+        if (m.results?.length > 0) setRanking(m.results)
+        workerRef.current = null
+      } else if (m.type === 'error') {
+        setErrorMsg(m.message); setStatus('error'); workerRef.current = null
+      }
+    }
+    worker.onerror = (ev) => { setErrorMsg(ev.message); setStatus('error'); workerRef.current = null }
+    worker.postMessage({ candles, optimRanges, params, startOffset, initialRanking })
+  }
 
   useEffect(() => {
     const bc = new BroadcastChannel('btc-supertrend-optim')
@@ -1127,37 +1224,89 @@ function SupertrendOptimView() {
       if (msg.type === 'init') {
         clearTimeout(retryTimer)
         const { candles, optimRanges, params } = msg
+        initDataRef.current = { candles, optimRanges, params }
+        setMaxDdFilter(optimRanges.maxDdFilter ?? 20)
         setStatus('running')
-        startTimeRef.current = Date.now()
-
-        const worker = new Worker(new URL('./supertrendOptimWorker.js', import.meta.url), { type: 'module' })
-        worker.onmessage = (ev) => {
-          const m = ev.data
-          if (m.type === 'progress') {
-            const elapsed = Date.now() - startTimeRef.current
-            let eta = null
-            if (m.done >= 1 && elapsed >= 300) {
-              eta = Math.round((m.total - m.done) / (m.done / elapsed))
-            }
-            setProgress({ done: m.done, total: m.total, eta })
-            if (m.topResults?.length > 0) setRanking(m.topResults)
-          } else if (m.type === 'done') {
-            setStatus('done')
-            setProgress(p => p ? { ...p, done: p.total } : null)
-            if (m.results?.length > 0) setRanking(m.results)
-            worker.terminate()
-          } else if (m.type === 'error') {
-            setErrorMsg(m.message); setStatus('error'); worker.terminate()
-          }
-        }
-        worker.onerror = (ev) => { setErrorMsg(ev.message); setStatus('error'); worker.terminate() }
-        worker.postMessage({ candles, optimRanges, params })
+        launchWorker(candles, optimRanges, params, 0, [])
       }
     }
-    return () => { clearTimeout(retryTimer); bc.close() }
+    return () => {
+      clearTimeout(retryTimer)
+      bc.close()
+      if (workerRef.current) { workerRef.current.terminate(); workerRef.current = null }
+    }
   }, [])
 
   function applyParams(row) { bcRef.current?.postMessage({ type: 'apply', row }) }
+
+  function handlePause() {
+    if (workerRef.current) { workerRef.current.terminate(); workerRef.current = null }
+    setStatus('paused')
+  }
+
+  function handleResume() {
+    if (!initDataRef.current || !progress) return
+    const { candles, optimRanges, params } = initDataRef.current
+    setStatus('running')
+    launchWorker(candles, optimRanges, params, progress.done, ranking)
+  }
+
+  function handleExportExcel() {
+    if (ranking.length === 0) return
+    const rows = ranking.map((r, i) => ({
+      '#':          i + 1,
+      'Score':      parseFloat(r._score?.toFixed(4)),
+      'ATR Period': r.atrPeriod,
+      'Mult.':      r.atrMultiplier,
+      'ATR Vol.':   r.atrVolFilter ?? 0,
+      'RSI':        r.rsiThreshold ?? 0,
+      'Body':       r.bodyRatioMin ?? 0,
+      'TP%':        r.tpPct,
+      'SL%':        r.slPct,
+      'Trades':     r.totalClosed,
+      'Win%':       r.winRate,
+      'Neto%':      r.totalNetPct,
+      'Drawdown%':  r.maxDrawdownPct,
+      'Capital$':   parseFloat(r.compoundCapital),
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Supertrend Profundo')
+    XLSX.writeFile(wb, 'supertrend_analisis_profundo.xlsx')
+  }
+
+  function onColDragStart(key) { dragColRef.current = key }
+  function onColDragOver(e) { e.preventDefault() }
+  function onColDrop(e, key) {
+    e.preventDefault()
+    const from = dragColRef.current
+    if (!from || from === key) return
+    setColOrder(prev => {
+      const arr = [...prev]
+      const fi = arr.indexOf(from)
+      const ti = arr.indexOf(key)
+      if (fi < 0 || ti < 0) return prev
+      arr.splice(fi, 1)
+      arr.splice(ti, 0, from)
+      return arr
+    })
+  }
+
+  const COL_DEFS = {
+    score:           { label: 'Score',     render: (r, k) => <td key={k} style={{color:'var(--accent)', fontWeight:600}}>{r._score?.toFixed(2)}</td> },
+    atrPeriod:       { label: 'ATR Per.',  render: (r, k) => <td key={k}>{r.atrPeriod}</td> },
+    atrMultiplier:   { label: 'Mult.',     render: (r, k) => <td key={k}>{r.atrMultiplier}</td> },
+    atrVolFilter:    { label: 'ATR Vol.',  render: (r, k) => <td key={k}>{r.atrVolFilter ?? '—'}</td> },
+    rsiThreshold:    { label: 'RSI',       render: (r, k) => <td key={k}>{r.rsiThreshold ?? '—'}</td> },
+    bodyRatioMin:    { label: 'Body',      render: (r, k) => <td key={k}>{r.bodyRatioMin ?? '—'}</td> },
+    tpPct:           { label: 'TP%',       render: (r, k) => <td key={k}>{r.tpPct}</td> },
+    slPct:           { label: 'SL%',       render: (r, k) => <td key={k}>{r.slPct}</td> },
+    totalClosed:     { label: 'Trades',    render: (r, k) => <td key={k}>{r.totalClosed}</td> },
+    winRate:         { label: 'Win%',      render: (r, k) => <td key={k}>{r.winRate}%</td> },
+    totalNetPct:     { label: 'Neto%',     render: (r, k) => <td key={k} className="tp-cell">{r.totalNetPct}%</td> },
+    maxDrawdownPct:  { label: 'Drawdown%', render: (r, k) => <td key={k} className={parseFloat(r.maxDrawdownPct) > maxDdFilter ? 'sl-cell' : ''}>{r.maxDrawdownPct}%</td> },
+    compoundCapital: { label: 'Capital $', render: (r, k) => <td key={k}>${parseFloat(r.compoundCapital).toLocaleString('es-CO', {minimumFractionDigits:2})}</td> },
+  }
 
   const pct = progress ? Math.round(progress.done / progress.total * 100) : 0
 
@@ -1178,6 +1327,25 @@ function SupertrendOptimView() {
               {progress.done.toLocaleString()} / {progress.total.toLocaleString()} · {pct}%
               {progress.eta != null && ` · faltan ${formatEta(progress.eta)}`}
               {' · '}{ranking.length} en ranking
+              <button
+                style={{marginLeft:12, padding:'2px 10px', fontSize:12, cursor:'pointer', borderRadius:4, border:'1px solid var(--border)'}}
+                onClick={handlePause}
+              >⏸ Pausar</button>
+            </span>
+          )}
+          {status === 'paused' && (
+            <span>
+              <span style={{color:'#f0a500'}}>⏸ Pausado</span>
+              {' · '}{progress?.done?.toLocaleString()} / {progress?.total?.toLocaleString()} · {ranking.length} en ranking
+              <button
+                style={{marginLeft:12, padding:'2px 10px', fontSize:12, cursor:'pointer', borderRadius:4, border:'1px solid var(--border)'}}
+                onClick={handleResume}
+              >▶ Reanudar</button>
+              <button
+                style={{marginLeft:8, padding:'2px 10px', fontSize:12, cursor:'pointer', borderRadius:4, background:'var(--green)', color:'#000', border:'none'}}
+                onClick={handleExportExcel}
+                disabled={ranking.length === 0}
+              >📥 Excel</button>
             </span>
           )}
           {status === 'done' && <span style={{color:'var(--green)'}}>✅ Completado · {ranking.length} en ranking</span>}
@@ -1202,19 +1370,43 @@ function SupertrendOptimView() {
           </div>
         )}
 
+        {ranking.length > 0 && (status === 'done' || status === 'paused') && (
+          <div style={{padding:'8px 16px 0'}}>
+            <button
+              className="run-btn optim-btn"
+              style={{width:'100%', marginBottom:8, background:'var(--green)', color:'#000'}}
+              onClick={handleExportExcel}
+            >
+              📥 Exportar ranking a Excel
+            </button>
+          </div>
+        )}
+
         {ranking.length > 0 && (
           <>
             <div className="optim-rank-meta">
-              Ranking por Score = Neto% ÷ Drawdown% · filtro: neto &gt; 0% · drawdown ≤ 70% · mín. 5 trades · top 200
+              Score = Neto% ÷ DD% · filtro: neto &gt; 0% · DD ≤ {maxDdFilter}% · mín. 5 trades · top {progress?.total ? (initDataRef.current?.optimRanges?.topN ?? 500) : '...'}
               {status === 'running' && ' · actualizando en vivo...'}
+              <span style={{opacity:0.55, fontSize:11, marginLeft:10}}>← arrastra encabezados para reordenar →</span>
             </div>
             <div className="table-wrap">
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>#</th><th>Score</th>
-                    <th>ATR Per.</th><th>Mult.</th><th>TP%</th><th>SL%</th>
-                    <th>Trades</th><th>Win%</th><th>Neto%</th><th>Drawdown%</th><th>Capital $</th>
+                    <th>#</th>
+                    {colOrder.map(key => (
+                      <th
+                        key={key}
+                        draggable
+                        onDragStart={() => onColDragStart(key)}
+                        onDragOver={onColDragOver}
+                        onDrop={e => onColDrop(e, key)}
+                        style={{cursor:'grab', userSelect:'none'}}
+                        title="Arrastra para reordenar"
+                      >
+                        {COL_DEFS[key].label}
+                      </th>
+                    ))}
                     <th>Aplicar</th>
                   </tr>
                 </thead>
@@ -1222,16 +1414,7 @@ function SupertrendOptimView() {
                   {ranking.map((r, i) => (
                     <tr key={i} className="row-win">
                       <td>{i + 1}</td>
-                      <td style={{color:'var(--accent)', fontWeight:600}}>{r._score?.toFixed(2)}</td>
-                      <td>{r.atrPeriod}</td>
-                      <td>{r.atrMultiplier}</td>
-                      <td>{r.tpPct}</td>
-                      <td>{r.slPct}</td>
-                      <td>{r.totalClosed}</td>
-                      <td>{r.winRate}%</td>
-                      <td className="tp-cell">{r.totalNetPct}%</td>
-                      <td className={parseFloat(r.maxDrawdownPct) > 30 ? 'sl-cell' : ''}>{r.maxDrawdownPct}%</td>
-                      <td>${parseFloat(r.compoundCapital).toLocaleString('es-CO', {minimumFractionDigits:2})}</td>
+                      {colOrder.map(key => COL_DEFS[key].render(r, key))}
                       <td><button className="apply-btn" onClick={() => applyParams(r)} title="Aplicar en pestaña Supertrend">▶</button></td>
                     </tr>
                   ))}
@@ -1257,6 +1440,9 @@ function SupertrendView() {
   const [optimRanges, setOptimRanges] = useState(DEFAULT_SUPERTREND_OPTIM)
   const optimBcRef = useRef(null)
 
+  const [multiMode, setMultiMode]   = useState(false)
+  const [multiCombos, setMultiCombos] = useState(DEFAULT_SUPERTREND_MULTI_COMBOS)
+
   const estimatedCombos = useMemo(() => countSupertrendCombinations(optimRanges), [optimRanges])
 
   useEffect(() => {
@@ -1279,6 +1465,9 @@ function SupertrendView() {
       atrMultiplier: row.atrMultiplier,
       tpPct:        row.tpPct,
       slPct:        row.slPct,
+      ...(row.atrVolFilter  != null ? { atrVolFilter:  row.atrVolFilter  } : {}),
+      ...(row.rsiThreshold  != null ? { rsiThreshold:  row.rsiThreshold  } : {}),
+      ...(row.bodyRatioMin  != null ? { bodyRatioMin:  row.bodyRatioMin  } : {}),
     }))
   }
 
@@ -1321,6 +1510,42 @@ function SupertrendView() {
     }
   }
 
+  const addStCombo = () => setMultiCombos(cs =>
+    cs.length < 15 ? [...cs, { ...DEFAULT_SUPERTREND_MULTI_COMBOS[0] }] : cs
+  )
+  const removeStCombo = (ci) => setMultiCombos(cs => cs.filter((_, i) => i !== ci))
+  const updateStCombo = (ci, key, raw) => {
+    const val = key === 'atrPeriod' ? parseInt(raw) || 1 : parseFloat(raw) || 0
+    setMultiCombos(cs => cs.map((c, i) => i === ci ? { ...c, [key]: val } : c))
+  }
+
+  async function handleMultiStRun() {
+    setLoading(true); setError(null); setResult(null)
+    try {
+      const resp = await fetch(`/api/candles?from=${params.dateFrom}&to=${params.dateTo}`)
+      if (!resp.ok) throw new Error((await resp.json()).error)
+      const { candles, total } = await resp.json()
+      if (total === 0) throw new Error('No se encontraron velas en ese rango de fechas.')
+      const bt = runMultiSupertrendBacktest(candles, multiCombos, {
+        feeSlPct:       params.feeSlPct,
+        feeTpPct:       params.feeTpPct,
+        leverage:       params.leverage,
+        initialCapital: params.initialCapital,
+        tradeDirection: params.tradeDirection,
+        skipSundays:    params.skipSundays,
+        atrVolPeriod:   params.atrVolPeriod,
+        rsiPeriod:      params.rsiPeriod,
+      })
+      if (!bt) throw new Error('No se pudieron calcular resultados.')
+      setResult({ ...bt, totalCandles: total, candles })
+      setActiveTab('stats')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const stats   = result?.stats
   const winRate = stats ? parseFloat(stats.winRate)     : 0
   const netPct  = stats ? parseFloat(stats.totalNetPct) : 0
@@ -1352,6 +1577,7 @@ function SupertrendView() {
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=rangehigh' }}>🏔️ Rango Alto</button>
         </div>
       </header>
 
@@ -1425,6 +1651,52 @@ function SupertrendView() {
                   <span className="toggle-track"><span className="toggle-thumb" /></span>
                 </label>
               </InputGroup>
+              <InputGroup label="Filtro EMA (período)" tooltip="Solo LONG si close > EMA(N), solo SHORT si close < EMA(N). 0 = desactivado.">
+                <input type="number" value={params.emaFilterPeriod} step="10" min="0" onChange={e => int('emaFilterPeriod', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Pausa tras SLs consecutivos" tooltip="Pausa el trading tras N SLs seguidos. 0 = desactivado.">
+                <input type="number" value={params.maxConsecLosses} step="1" min="0" max="20" onChange={e => int('maxConsecLosses', e.target.value)} />
+              </InputGroup>
+              {params.maxConsecLosses > 0 && (
+                <InputGroup label="Velas de pausa" tooltip="Cuántas velas se salta el trading luego de la racha de pérdidas.">
+                  <input type="number" value={params.consecCooldownBars} step="5" min="1" onChange={e => int('consecCooldownBars', e.target.value)} />
+                </InputGroup>
+              )}
+              <InputGroup label="ATR volat. máx (ratio)" tooltip="Solo operar si ATR actual ≤ ratio × SMA(ATR). Evita entradas en picos de volatilidad. 0 = desactivado.">
+                <input type="number" value={params.atrVolFilter} step="0.1" min="0" max="5" onChange={e => num('atrVolFilter', e.target.value)} />
+              </InputGroup>
+              {params.atrVolFilter > 0 && (
+                <InputGroup label="Período SMA del ATR" tooltip="Barras para calcular el promedio base del ATR.">
+                  <input type="number" value={params.atrVolPeriod} step="5" min="5" max="100" onChange={e => int('atrVolPeriod', e.target.value)} />
+                </InputGroup>
+              )}
+              <InputGroup label="ADX mínimo" tooltip="Solo operar si ADX ≥ umbral (fuerza de tendencia). 0 = desactivado.">
+                <input type="number" value={params.adxMinimum} step="5" min="0" max="60" onChange={e => num('adxMinimum', e.target.value)} />
+              </InputGroup>
+              {params.adxMinimum > 0 && (
+                <InputGroup label="ADX período" tooltip="Período del ADX de Wilder (estándar = 14).">
+                  <input type="number" value={params.adxPeriod} step="1" min="5" max="50" onChange={e => int('adxPeriod', e.target.value)} />
+                </InputGroup>
+              )}
+              <InputGroup label="RSI umbral sobrecompra" tooltip="No LONG si RSI > umbral, no SHORT si RSI < (100-umbral). 0 = desactivado. Ej: 70 → bloquea LONG>70 y SHORT<30.">
+                <input type="number" value={params.rsiThreshold} step="5" min="0" max="100" onChange={e => num('rsiThreshold', e.target.value)} />
+              </InputGroup>
+              {params.rsiThreshold > 0 && (
+                <InputGroup label="RSI período">
+                  <input type="number" value={params.rsiPeriod} step="1" min="2" max="50" onChange={e => int('rsiPeriod', e.target.value)} />
+                </InputGroup>
+              )}
+              <InputGroup label="Cuerpo vela mínimo (ratio)" tooltip="Solo entrar si |close-open|/(high-low) ≥ valor. Filtra velas de indecisión. 0 = desactivado. Ej: 0.3 = 30%.">
+                <input type="number" value={params.bodyRatioMin} step="0.05" min="0" max="1" onChange={e => num('bodyRatioMin', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="EMA pendiente (período)" tooltip="LONG solo si EMA sube, SHORT solo si EMA baja. 0 = desactivado.">
+                <input type="number" value={params.slopeEmaPeriod} step="10" min="0" onChange={e => int('slopeEmaPeriod', e.target.value)} />
+              </InputGroup>
+              {params.slopeEmaPeriod > 0 && (
+                <InputGroup label="Barras para pendiente" tooltip="Cuántas velas atrás comparar para calcular la pendiente.">
+                  <input type="number" value={params.slopeLookback} step="1" min="1" max="20" onChange={e => int('slopeLookback', e.target.value)} />
+                </InputGroup>
+              )}
             </Section>
 
             <Section title="🔬 Análisis Profundo">
@@ -1437,21 +1709,106 @@ function SupertrendView() {
               {optimMode && (
                 <>
                   <div className="optim-hint">Min · Max · Paso</div>
-                  <OptimRow label="TP (%)"     field="tpPct"         stepHint="0.1"  ranges={optimRanges} onChange={setOptimField} />
-                  <OptimRow label="SL (%)"     field="slPct"         stepHint="0.1"  ranges={optimRanges} onChange={setOptimField} />
-                  <OptimRow label="ATR Period" field="atrPeriod"     stepHint="1"    ranges={optimRanges} onChange={setOptimField} />
-                  <OptimRow label="Mult."      field="atrMultiplier" stepHint="0.5"  ranges={optimRanges} onChange={setOptimField} />
+                  <OptimRow label="TP (%)"        field="tpPct"         stepHint="0.1"  ranges={optimRanges} onChange={setOptimField} />
+                  <OptimRow label="SL (%)"        field="slPct"         stepHint="0.1"  ranges={optimRanges} onChange={setOptimField} />
+                  <OptimRow label="ATR Period"    field="atrPeriod"     stepHint="1"    ranges={optimRanges} onChange={setOptimField} />
+                  <OptimRow label="Mult."         field="atrMultiplier" stepHint="0.5"  ranges={optimRanges} onChange={setOptimField} />
+                  <OptimRow label="ATR Vol.ratio" field="atrVolFilter"  stepHint="0.1"  ranges={optimRanges} onChange={setOptimField} />
+                  <OptimRow label="RSI umbral"    field="rsiThreshold"  stepHint="5"    ranges={optimRanges} onChange={setOptimField} />
+                  <OptimRow label="Body ratio"    field="bodyRatioMin"  stepHint="0.05" ranges={optimRanges} onChange={setOptimField} />
+                  <InputGroup label="DD máx. (%)">
+                    <input type="number" value={optimRanges.maxDdFilter ?? 20} step="5" min="5" onChange={e => setOptimRanges(r => ({ ...r, maxDdFilter: parseFloat(e.target.value) || 20 }))} />
+                  </InputGroup>
+                  <InputGroup label="Top N ranking">
+                    <input type="number" value={optimRanges.topN ?? 500} step="100" min="50" onChange={e => setOptimRanges(r => ({ ...r, topN: parseInt(e.target.value) || 500 }))} />
+                  </InputGroup>
                   <div className="optim-combos">{estimatedCombos.toLocaleString()} combinaciones</div>
                 </>
               )}
             </Section>
 
+            {/* ── MULTI-COMBINACIONES ── */}
+            <div className="section optim-section">
+              <div className="optim-section-header" onClick={() => { setMultiMode(v => !v); setOptimMode(false) }}>
+                <span className="section-title" style={{marginBottom:0, borderBottom:'none', paddingBottom:0}}>🎯 Multi-Combinaciones</span>
+                <span className="optim-chevron">{multiMode ? '▲' : '▼'}</span>
+              </div>
+              {multiMode && (
+                <div className="optim-body">
+                  <div style={{fontSize:11, color:'var(--text-muted)', marginBottom:8, lineHeight:1.5}}>
+                    Hasta 15 combos. 1 trade a la vez — el primero que cruce Supertrend toma el trade.
+                  </div>
+                  {multiCombos.map((combo, ci) => (
+                    <div key={ci} className="multi-combo-block">
+                      <div className="multi-combo-header">
+                        <span style={{fontSize:11, fontWeight:700, color:'var(--accent)', textTransform:'uppercase', letterSpacing:'0.06em'}}>
+                          Combo {ci + 1}
+                        </span>
+                        {multiCombos.length > 1 && (
+                          <button className="multi-remove-btn" onClick={() => removeStCombo(ci)}>✕</button>
+                        )}
+                      </div>
+                      <div className="multi-combo-fields">
+                        <div className="multi-field">
+                          <label>ATR Per.</label>
+                          <input type="number" step="1" min="2" value={combo.atrPeriod} onChange={e => updateStCombo(ci, 'atrPeriod', e.target.value)} />
+                        </div>
+                        <div className="multi-field">
+                          <label>Mult.</label>
+                          <input type="number" step="0.1" min="0.5" value={combo.atrMultiplier} onChange={e => updateStCombo(ci, 'atrMultiplier', e.target.value)} />
+                        </div>
+                        <div className="multi-field">
+                          <label>TP%</label>
+                          <input type="number" step="0.01" min="0.01" value={combo.tpPct} onChange={e => updateStCombo(ci, 'tpPct', e.target.value)} />
+                        </div>
+                        <div className="multi-field">
+                          <label>SL%</label>
+                          <input type="number" step="0.01" min="0.01" value={combo.slPct} onChange={e => updateStCombo(ci, 'slPct', e.target.value)} />
+                        </div>
+                        <div className="multi-field">
+                          <label>ATR Vol</label>
+                          <input type="number" step="0.1" min="0" value={combo.atrVolFilter ?? 0} onChange={e => updateStCombo(ci, 'atrVolFilter', e.target.value)} />
+                        </div>
+                        <div className="multi-field">
+                          <label>RSI</label>
+                          <input type="number" step="5" min="0" max="100" value={combo.rsiThreshold ?? 0} onChange={e => updateStCombo(ci, 'rsiThreshold', e.target.value)} />
+                        </div>
+                        <div className="multi-field">
+                          <label>Body</label>
+                          <input type="number" step="0.05" min="0" max="1" value={combo.bodyRatioMin ?? 0} onChange={e => updateStCombo(ci, 'bodyRatioMin', e.target.value)} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {multiCombos.length < 15 && (
+                    <button
+                      className="run-btn optim-btn"
+                      style={{width:'100%', marginTop:4, padding:'8px', fontSize:12}}
+                      onClick={addStCombo}
+                    >
+                      + Agregar combo
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
           </div>
           <div className="sidebar-footer">
-            {optimMode
-              ? <button className="run-btn optim-btn" onClick={handleOptimize} disabled={!dbStatus?.connected}>
-                  🔬 Abrir Análisis Profundo
+            {multiMode
+              ? <button className="run-btn" onClick={handleMultiStRun} disabled={loading || !dbStatus?.connected}>
+                  {loading ? <><span className="spinner" /> Procesando...</> : '▶ Ejecutar Multi-Backtest'}
                 </button>
+              : optimMode
+              ? <>
+                  <button className="run-btn optim-btn" onClick={handleOptimize} disabled={!dbStatus?.connected}>
+                    🔬 Abrir Análisis Profundo
+                  </button>
+                  <button className="run-btn optim-btn" style={{marginTop:'0.4rem'}}
+                    onClick={() => window.open(window.location.pathname + '?strategy=supertrend&mode=exceloptim', '_blank')}>
+                    📊 Análisis Multi-Combo Excel
+                  </button>
+                </>
               : <button className="run-btn" onClick={handleRun} disabled={loading || !dbStatus?.connected}>
                   {loading ? <><span className="spinner" /> Procesando...</> : '▶ Ejecutar Backtest'}
                 </button>
@@ -1507,8 +1864,9 @@ function SupertrendView() {
                     <StatCard label="Capital simple"    value={`$${parseFloat(stats.simpleCapital).toLocaleString('es-CO',{minimumFractionDigits:2})}`}   variant="neutral" />
                     <StatCard label="Capital compuesto" value={`$${parseFloat(stats.compoundCapital).toLocaleString('es-CO',{minimumFractionDigits:2})}`} variant="accent" />
                     <StatCard label="Mejor método"                         value={stats.bestMethod}     variant="accent" />
-                    <StatCard label={`TP efectivo x${params.leverage}`}    value={`${stats.effectiveTpPct}%`} variant="neutral" />
-                    <StatCard label={`SL efectivo x${params.leverage}`}    value={`${stats.effectiveSlPct}%`} variant="neutral" />
+                    {result.isMulti && <StatCard label="Combos activos" value={multiCombos.length} variant="neutral" />}
+                    {!result.isMulti && <StatCard label={`TP efectivo x${params.leverage}`} value={`${stats.effectiveTpPct}%`} variant="neutral" />}
+                    {!result.isMulti && <StatCard label={`SL efectivo x${params.leverage}`} value={`${stats.effectiveSlPct}%`} variant="neutral" />}
                   </div>
 
                   {result.trades.length > 0 && (() => {
@@ -1832,6 +2190,7 @@ function AppMain() {
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=rangehigh' }}>🏔️ Rango Alto</button>
         </div>
       </header>
 
@@ -2782,6 +3141,7 @@ function SarView() {
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=rangehigh' }}>🏔️ Rango Alto</button>
         </div>
       </header>
 
@@ -3271,6 +3631,7 @@ function PinBarView() {
           <button className="strategy-tab active">🕯️ Pin Bar</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=rangehigh' }}>🏔️ Rango Alto</button>
         </div>
       </header>
 
@@ -3752,6 +4113,7 @@ function EmaPullbackView() {
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=rangehigh' }}>🏔️ Rango Alto</button>
         </div>
       </header>
 
@@ -4250,6 +4612,7 @@ function ConfluenceView() {
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=rangehigh' }}>🏔️ Rango Alto</button>
         </div>
       </header>
 
@@ -5264,6 +5627,7 @@ function SoporteView() {
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
           <button className="strategy-tab active">📗 Rango + Soporte</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=rangehigh' }}>🏔️ Rango Alto</button>
         </div>
       </header>
 
@@ -6885,6 +7249,7 @@ function EmaView() {
       <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
       <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
       <button className="strategy-tab active">📡 EMA Touch</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=rangehigh' }}>🏔️ Rango Alto</button>
     </>
   )
 
@@ -7268,21 +7633,753 @@ function EmaView() {
   )
 }
 
+// =============================================================================
+// RangeHighView — Rango Dinámico + Toque con Mecha (SHORT y LONG)
+// =============================================================================
+function RangeHighView() {
+  const [params, setParams]     = useState(DEFAULT_RANGE_HIGH_PARAMS)
+  const [result, setResult]     = useState(null)
+  const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState(null)
+  const [dbStatus, setDbStatus] = useState(null)
+  const [activeTab, setActiveTab] = useState('stats')
+  const [multiMode, setMultiMode] = useState(false)
+  const [multiCombos, setMultiCombos] = useState(DEFAULT_RANGE_HIGH_MULTI_COMBOS)
+
+  useEffect(() => {
+    fetch('/api/status')
+      .then(r => r.json())
+      .then(d => setDbStatus(d))
+      .catch(() => setDbStatus({ connected: false, error: 'No se pudo conectar al servidor' }))
+  }, [])
+
+  const set = (key, val) => setParams(p => ({ ...p, [key]: val }))
+  const num = (key, val) => set(key, parseFloat(val) || 0)
+  const int = (key, val) => set(key, parseInt(val) || 1)
+
+  async function handleRun() {
+    setLoading(true); setError(null); setResult(null)
+    try {
+      const resp = await fetch(`/api/candles?from=${params.dateFrom}&to=${params.dateTo}`)
+      if (!resp.ok) throw new Error((await resp.json()).error)
+      const { candles, total } = await resp.json()
+      if (!total) throw new Error('No se encontraron velas en ese rango de fechas.')
+      const bt = runRangeHighBacktest(candles, params)
+      if (!bt) throw new Error('No se pudieron calcular resultados.')
+      setResult({ ...bt, totalCandles: total })
+      setActiveTab('stats')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleMultiRun() {
+    setLoading(true); setError(null); setResult(null)
+    try {
+      const resp = await fetch(`/api/candles?from=${params.dateFrom}&to=${params.dateTo}`)
+      if (!resp.ok) throw new Error((await resp.json()).error)
+      const { candles, total } = await resp.json()
+      if (!total) throw new Error('No se encontraron velas en ese rango de fechas.')
+      const bt = runMultiRangeHighBacktest(candles, multiCombos, {
+        feeSlPct:            params.feeSlPct,
+        feeTpPct:            params.feeTpPct,
+        leverage:            params.leverage,
+        initialCapital:      params.initialCapital,
+        monthlyContribution: params.monthlyContribution,
+      })
+      setResult({ ...bt, totalCandles: total })
+      setActiveTab('stats')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function handleDownloadDebug() {
+    if (!result?.debugLog) return
+    const blob = new Blob([JSON.stringify(result.debugLog, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `debug_rangehigh_${params.dateFrom}_${params.dateTo}.json`; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const addCombo = () => setMultiCombos(cs =>
+    cs.length < 15
+      ? [...cs, { ...DEFAULT_RANGE_HIGH_MULTI_COMBOS[0], label: `Combo ${cs.length + 1}` }]
+      : cs
+  )
+  const removeCombo = (ci) => setMultiCombos(cs => cs.filter((_, i) => i !== ci))
+  const updateCombo = (ci, key, raw) => {
+    const val = key === 'lookbackCandles' ? parseInt(raw) || 1 : parseFloat(raw) || 0
+    setMultiCombos(cs => cs.map((c, i) => i === ci ? { ...c, [key]: val } : c))
+  }
+
+  const stats   = result?.stats ?? {}
+  const winRate = parseFloat(stats.winRate     ?? 0)
+  const netPct  = parseFloat(stats.totalNetPct ?? 0)
+
+  return (
+    <div className="app">
+      <header className="header">
+        <div className="header-inner">
+          <div className="logo">
+            <span className="logo-icon">₿</span>
+            <div>
+              <div className="logo-title">MariaPaz<span style={{color:'var(--accent)'}}>Indicator</span></div>
+              <div className="logo-sub">Rango Alto · SHORT + LONG · BTCUSDC · 15m</div>
+            </div>
+          </div>
+          <div className={`db-badge ${dbStatus?.connected ? 'connected' : 'disconnected'}`}>
+            <span className="db-dot" />
+            {dbStatus?.connected
+              ? `BD conectada · ${dbStatus.totalCandles?.toLocaleString()} velas`
+              : dbStatus?.error ?? 'Conectando...'}
+          </div>
+        </div>
+        <div className="strategy-nav">
+          <button className="strategy-tab" onClick={() => { window.location.href = '/' }}>📐 Rango + Resistencias</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=sar' }}>📈 SAR</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend' }}>📊 Supertrend</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=confluence' }}>🎯 Confluencia</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=emapullback' }}>📉 EMA Pullback</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
+          <button className="strategy-tab active">🏔️ Rango Alto</button>
+        </div>
+      </header>
+
+      <div className="layout">
+        <aside className="sidebar">
+          <div className="sidebar-scroll">
+
+            <Section title="📅 Rango de fechas">
+              <InputGroup label="Desde">
+                <input type="date" value={params.dateFrom} onChange={e => set('dateFrom', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Hasta">
+                <input type="date" value={params.dateTo}   onChange={e => set('dateTo',   e.target.value)} />
+              </InputGroup>
+            </Section>
+
+            <Section title="📐 Configuración del Rango">
+              <InputGroup label="Mínimo (%)" tooltip="% mínimo de compresión del rango">
+                <input type="number" step="0.1" value={params.minRangePct} onChange={e => num('minRangePct', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Máximo (%)" tooltip="% máximo de compresión del rango">
+                <input type="number" step="0.1" value={params.maxRangePct} onChange={e => num('maxRangePct', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Velas lookback">
+                <input type="number" step="1" min="1" value={params.lookbackCandles} onChange={e => int('lookbackCandles', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Mecha mínima (%)" tooltip="% mínimo de mecha respecto al rango total de la vela">
+                <input type="number" step="0.1" value={params.minWickPct} onChange={e => num('minWickPct', e.target.value)} />
+              </InputGroup>
+            </Section>
+
+            <Section title="⚖️ TP / SL">
+              <InputGroup label="Buffer SL (%)" tooltip="% adicional sobre el High (SHORT) o bajo el Low (LONG) para colocar el SL">
+                <input type="number" step="0.01" value={params.slBufferPct} onChange={e => num('slBufferPct', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="TP (%)">
+                <input type="number" step="0.01" value={params.tpPct} onChange={e => num('tpPct', e.target.value)} />
+              </InputGroup>
+            </Section>
+
+            <Section title="📊 Estadísticas">
+              <InputGroup label="Fee SL extra (%)">
+                <input type="number" step="0.01" value={params.feeSlPct} onChange={e => num('feeSlPct', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Fee TP (%)">
+                <input type="number" step="0.01" value={params.feeTpPct} onChange={e => num('feeTpPct', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Apalancamiento">
+                <input type="number" step="1" min="1" value={params.leverage} onChange={e => num('leverage', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Capital inicial ($)">
+                <input type="number" step="100" min="1" value={params.initialCapital} onChange={e => num('initialCapital', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Aporte mensual ($)" tooltip="Monto que se suma al capital compuesto cada mes. 0 = sin aporte.">
+                <input type="number" step="50" min="0" value={params.monthlyContribution} onChange={e => num('monthlyContribution', e.target.value)} />
+              </InputGroup>
+            </Section>
+
+            <div className="section optim-section">
+              <div className="optim-section-header" onClick={() => setMultiMode(v => !v)}>
+                <span className="section-title" style={{marginBottom:0, borderBottom:'none', paddingBottom:0}}>🎯 Multi-Combinaciones</span>
+                <span className="optim-chevron">{multiMode ? '▲' : '▼'}</span>
+              </div>
+              {multiMode && (
+                <div className="optim-body">
+                  <div style={{fontSize:11, color:'var(--text-muted)', marginBottom:8, lineHeight:1.5}}>
+                    Hasta 15 combos. 1 trade/día — gana el primero que dispare señal (SHORT tiene prioridad sobre LONG).
+                  </div>
+                  {multiCombos.map((combo, ci) => (
+                    <div key={ci} className="multi-combo-block">
+                      <div className="multi-combo-header">
+                        <span style={{fontSize:11, fontWeight:700, color:'var(--accent)', textTransform:'uppercase', letterSpacing:'0.06em'}}>
+                          Combo {ci + 1}
+                        </span>
+                        {multiCombos.length > 1 && (
+                          <button className="multi-remove-btn" onClick={() => removeCombo(ci)}>✕</button>
+                        )}
+                      </div>
+                      <div className="multi-combo-fields">
+                        <div className="multi-field">
+                          <label>Min%</label>
+                          <input type="number" step="0.1" value={combo.minRangePct} onChange={e => updateCombo(ci, 'minRangePct', e.target.value)} />
+                        </div>
+                        <div className="multi-field">
+                          <label>Max%</label>
+                          <input type="number" step="0.1" value={combo.maxRangePct} onChange={e => updateCombo(ci, 'maxRangePct', e.target.value)} />
+                        </div>
+                        <div className="multi-field">
+                          <label>LB</label>
+                          <input type="number" step="1" min="1" value={combo.lookbackCandles} onChange={e => updateCombo(ci, 'lookbackCandles', e.target.value)} />
+                        </div>
+                        <div className="multi-field">
+                          <label>Mecha%</label>
+                          <input type="number" step="0.1" value={combo.minWickPct} onChange={e => updateCombo(ci, 'minWickPct', e.target.value)} />
+                        </div>
+                        <div className="multi-field">
+                          <label>Buffer%</label>
+                          <input type="number" step="0.01" value={combo.slBufferPct} onChange={e => updateCombo(ci, 'slBufferPct', e.target.value)} />
+                        </div>
+                        <div className="multi-field">
+                          <label>TP%</label>
+                          <input type="number" step="0.01" value={combo.tpPct} onChange={e => updateCombo(ci, 'tpPct', e.target.value)} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {multiCombos.length < 15 && (
+                    <button
+                      className="run-btn optim-btn"
+                      style={{width:'100%', marginTop:4, padding:'8px', fontSize:12}}
+                      onClick={addCombo}
+                    >
+                      + Agregar combo
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div style={{display:'flex', gap:8, marginTop:8}}>
+              <button
+                className="run-btn"
+                style={{flex:1}}
+                onClick={multiMode ? handleMultiRun : handleRun}
+                disabled={loading}
+              >
+                {loading ? 'Calculando...' : multiMode ? '▶ Correr Multi' : '▶ Correr Backtest'}
+              </button>
+            </div>
+
+            {result?.debugLog && (
+              <button className="run-btn optim-btn" style={{width:'100%', marginTop:6, fontSize:11}} onClick={handleDownloadDebug}>
+                ⬇ Debug JSON
+              </button>
+            )}
+
+          </div>
+        </aside>
+
+        <main className="main">
+          {error && <div className="error-box">{error}</div>}
+
+          {result && (
+            <>
+              <div className="tabs">
+                <button className={`tab ${activeTab === 'stats'  ? 'active' : ''}`} onClick={() => setActiveTab('stats')}>Estadísticas</button>
+                <button className={`tab ${activeTab === 'trades' ? 'active' : ''}`} onClick={() => setActiveTab('trades')}>Trades ({result.trades?.length ?? 0})</button>
+                <button className={`tab ${activeTab === 'signals'? 'active' : ''}`} onClick={() => setActiveTab('signals')}>Señales ({result.signals?.length ?? 0})</button>
+              </div>
+
+              {activeTab === 'stats' && (
+                <div className="stats-grid">
+                  <StatCard label="TP"          value={stats.totalTp}                         color="var(--green)" />
+                  <StatCard label="SL"          value={stats.totalSl}                         color="var(--red)" />
+                  <StatCard label="Total"       value={stats.totalClosed} />
+                  <StatCard label="Win Rate"    value={`${parseFloat(stats.winRate ?? 0).toFixed(1)}%`} color={winRate >= 50 ? 'var(--green)' : 'var(--red)'} />
+                  <StatCard label="Ganancia"    value={`${stats.totalProfitPct}%`}             color="var(--green)" />
+                  <StatCard label="Pérdida"     value={`${stats.totalLossPct}%`}               color="var(--red)" />
+                  <StatCard label="Neto"        value={`${stats.totalNetPct}%`}                color={netPct >= 0 ? 'var(--green)' : 'var(--red)'} />
+                  <StatCard label="Max DD"      value={`${stats.maxDrawdownPct}%`}             color="var(--orange)" />
+                  <StatCard label="Capital S"   value={`$${parseFloat(stats.simpleCapital ?? 0).toLocaleString(undefined,{maximumFractionDigits:0})}`} />
+                  <StatCard label="Capital C"   value={`$${parseFloat(stats.compoundCapital ?? 0).toLocaleString(undefined,{maximumFractionDigits:0})}`} color="var(--accent)" />
+                  <StatCard label="TP efectivo" value={`${stats.effectiveTpPct ?? '—'}%`} />
+                  <StatCard label="Velas"       value={result.totalCandles?.toLocaleString()} />
+                </div>
+              )}
+
+              {activeTab === 'trades' && (
+                <div className="table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Tipo</th>
+                        {result.isMulti && <th>Combo</th>}
+                        <th>Entrada</th>
+                        <th>SL</th>
+                        <th>TP</th>
+                        <th>Resultado</th>
+                        <th>Cierre</th>
+                        <th>Capital</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.trades.map((t, i) => (
+                        <tr key={i} className={t.result === 'TP' ? 'row-tp' : 'row-sl'}>
+                          <td>{t.time?.substring(0,16)}</td>
+                          <td style={{color: t.tipo === 'SHORT' ? 'var(--red)' : 'var(--green)', fontWeight:700}}>{t.tipo}</td>
+                          {result.isMulti && <td>{t.comboLabel}</td>}
+                          <td>${parseFloat(t.price).toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+                          <td>${parseFloat(t.sl).toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+                          <td>${parseFloat(t.tp).toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+                          <td style={{color: t.result === 'TP' ? 'var(--green)' : 'var(--red)', fontWeight:700}}>{t.result}</td>
+                          <td>{t.closeTime?.substring(0,16)}</td>
+                          <td>${parseFloat(t.capitalAtExit ?? 0).toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {activeTab === 'signals' && (
+                <div className="table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Tipo</th>
+                        {result.isMulti && <th>Combo</th>}
+                        <th>Entrada</th>
+                        <th>SL</th>
+                        <th>TP</th>
+                        <th>Rango %</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.signals.map((s, i) => (
+                        <tr key={i}>
+                          <td>{s.time?.substring(0,16)}</td>
+                          <td style={{color: s.tipo === 'SHORT' ? 'var(--red)' : 'var(--green)', fontWeight:700}}>{s.tipo}</td>
+                          {result.isMulti && <td>{s.comboLabel}</td>}
+                          <td>${parseFloat(s.price).toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+                          <td>${parseFloat(s.sl).toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+                          <td>${parseFloat(s.tp).toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+                          <td>{s.rangePct}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+
+          {!result && !loading && !error && (
+            <div className="empty-state">
+              <div style={{fontSize:48, marginBottom:12}}>🏔️</div>
+              <div style={{fontSize:18, marginBottom:8}}>Rango Dinámico · Toque con Mecha</div>
+              <div style={{color:'var(--text-muted)', fontSize:13}}>
+                SHORT en techo del rango · LONG en piso del rango<br/>
+                SL sobre el High de la vela señal · 1 trade por día
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+    </div>
+  )
+}
+
+// =============================================================================
+// SupertrendExcelOptimView — Multi-Combo Excel para Supertrend
+// =============================================================================
+function SupertrendExcelOptimView() {
+  const [combos, setCombos]         = useState([])
+  const [fileName, setFileName]     = useState('')
+  const [candles, setCandles]       = useState(null)
+  const [status, setStatus]         = useState('idle')
+  const [progress, setProgress]     = useState(null)
+  const [ranking, setRanking]       = useState([])
+  const [errorMsg, setErrorMsg]     = useState('')
+  const [dateFrom, setDateFrom]     = useState('2022-01-01')
+  const [dateTo, setDateTo]         = useState(new Date().toISOString().split('T')[0])
+  const [params, setParams]         = useState({ feeSlPct: 0.10, feeTpPct: 0.05, leverage: 10, initialCapital: 1000 })
+  const [sortKey, setSortKey]       = useState('_score')
+  const [sortDir, setSortDir]       = useState('desc')
+  const [showCombos, setShowCombos] = useState(false)
+  const [minTrades, setMinTrades]   = useState(0)
+  const [maxTrades, setMaxTrades]   = useState(9999)
+  const startTimeRef = useRef(null)
+  const workerRef    = useRef(null)
+  const fileInputRef = useRef(null)
+
+  function parseNum(v) {
+    if (typeof v === 'number') return v
+    if (typeof v === 'string') return parseFloat(v.replace(',', '.'))
+    return NaN
+  }
+
+  function handleFile(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    setFileName(file.name)
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const wb = XLSX.read(ev.target.result, { type: 'array' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' })
+      const parsed = rows.map(row => ({
+        atrPeriod:    Math.round(parseNum(row['ATR Period'] ?? row['atrPeriod'] ?? row['ATR Per.'] ?? NaN)),
+        atrMultiplier: parseNum(row['Mult.'] ?? row['atrMultiplier'] ?? NaN),
+        atrVolFilter:  parseNum(row['ATR Vol.'] ?? row['atrVolFilter'] ?? 0),
+        rsiThreshold:  parseNum(row['RSI'] ?? row['rsiThreshold'] ?? 0),
+        bodyRatioMin:  parseNum(row['Body'] ?? row['bodyRatioMin'] ?? 0),
+        tpPct:         parseNum(row['TP%'] ?? row['tpPct'] ?? NaN),
+        slPct:         parseNum(row['SL%'] ?? row['slPct'] ?? NaN),
+        _score:        parseNum(row['Score'] ?? row['_score'] ?? 0),
+      })).filter(c =>
+        !isNaN(c.atrPeriod) && c.atrPeriod > 0 &&
+        !isNaN(c.atrMultiplier) && c.atrMultiplier > 0 &&
+        !isNaN(c.tpPct) && !isNaN(c.slPct)
+      )
+      setCombos(parsed)
+      setRanking([])
+      setStatus('idle')
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
+  async function handleLoadCandles() {
+    setStatus('loadingCandles')
+    setErrorMsg('')
+    try {
+      const res = await fetch(`http://localhost:3001/api/candles?from=${dateFrom}&to=${dateTo}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error cargando velas')
+      setCandles(data.candles)
+      setStatus('idle')
+    } catch (err) {
+      setErrorMsg(err.message)
+      setStatus('error')
+    }
+  }
+
+  function handleRun() {
+    if (!candles || combos.length < 3) return
+    workerRef.current?.terminate()
+    setStatus('running')
+    setRanking([])
+    setProgress(null)
+    startTimeRef.current = Date.now()
+
+    const worker = new Worker(new URL('./supertrendExcelMultiWorker.js', import.meta.url), { type: 'module' })
+    workerRef.current = worker
+    worker.onmessage = (ev) => {
+      const m = ev.data
+      if (m.type === 'progress') {
+        const elapsed = Date.now() - startTimeRef.current
+        let eta = null
+        if (m.done >= 50 && elapsed >= 500) eta = Math.round((m.total - m.done) / (m.done / elapsed))
+        setProgress({ done: m.done, total: m.total, eta })
+        if (m.topResults?.length > 0) setRanking(m.topResults)
+      } else if (m.type === 'done') {
+        setStatus('done')
+        setProgress(p => p ? { ...p, done: p.total } : null)
+        if (m.results?.length > 0) setRanking(m.results)
+        worker.terminate()
+      } else if (m.type === 'error') {
+        setErrorMsg(m.message)
+        setStatus('error')
+        worker.terminate()
+      }
+    }
+    worker.onerror = (ev) => { setErrorMsg(ev.message); setStatus('error'); worker.terminate() }
+    worker.postMessage({ combos, candles, params, groupSizes: [3,4,5,6,7,8,9,10,11,12,13,14,15], samplesPerSize: 5000 })
+  }
+
+  function handleSort(key) {
+    if (sortKey === key) setSortDir(d => d === 'desc' ? 'asc' : 'desc')
+    else { setSortKey(key); setSortDir('desc') }
+  }
+
+  const sortedRanking = useMemo(() => {
+    if (!ranking.length) return []
+    return [...ranking]
+      .filter(r => {
+        const tc = parseInt(r.totalClosed)
+        return tc >= minTrades && tc <= maxTrades
+      })
+      .sort((a, b) => {
+        const av = parseFloat(a[sortKey] ?? 0)
+        const bv = parseFloat(b[sortKey] ?? 0)
+        return sortDir === 'desc' ? bv - av : av - bv
+      })
+  }, [ranking, sortKey, sortDir, minTrades, maxTrades])
+
+  function fmtEta(ms) {
+    if (!ms) return ''
+    const s = Math.round(ms / 1000)
+    return s < 60 ? `~${s}s` : `~${Math.floor(s/60)}m ${s%60}s`
+  }
+
+  function SortTh({ col, label }) {
+    const active = sortKey === col
+    return (
+      <th onClick={() => handleSort(col)}
+        style={{cursor:'pointer', userSelect:'none', color: active ? 'var(--accent)' : undefined, whiteSpace:'nowrap'}}>
+        {label}{' '}{active
+          ? (sortDir === 'desc' ? '▼' : '▲')
+          : <span style={{opacity:0.25}}>▼</span>}
+      </th>
+    )
+  }
+
+  function comboLabel(c) {
+    return `P${c.atrPeriod} M${c.atrMultiplier} V${c.atrVolFilter??0} R${c.rsiThreshold??0} B${c.bodyRatioMin??0} TP${c.tpPct} SL${c.slPct}`
+  }
+
+  const pct = progress ? Math.round(progress.done / progress.total * 100) : 0
+  const isRunning        = status === 'running'
+  const isLoadingCandles = status === 'loadingCandles'
+  const canRun = candles && combos.length >= 3 && !isRunning && !isLoadingCandles
+
+  const inputStyle = { width:'100%', background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'var(--radius)', color:'var(--text)', padding:'7px 10px', fontFamily:'var(--font-mono)', fontSize:13 }
+
+  return (
+    <div className="optim-page">
+
+      <header className="optim-page-header">
+        <div className="logo">
+          <span className="logo-icon">₿</span>
+          <div>
+            <div className="logo-title">MariaPaz<span style={{color:'var(--accent)'}}>Indicator</span></div>
+            <div className="logo-sub">📗 Multi-Combo Supertrend · Desde Excel</div>
+          </div>
+        </div>
+        <div className="optim-page-status">
+          {status === 'idle' && combos.length === 0 && 'Carga un archivo Excel para comenzar'}
+          {status === 'idle' && combos.length > 0 && !candles && `${combos.length} combos cargados · Carga velas para continuar`}
+          {status === 'idle' && combos.length > 0 && candles && `${combos.length} combos · ${candles.length.toLocaleString()} velas · Listo`}
+          {isLoadingCandles && 'Cargando velas desde BD...'}
+          {isRunning && progress && (
+            <span>
+              {progress.done.toLocaleString()} / {progress.total.toLocaleString()} · {pct}%
+              {progress.eta != null && ` · faltan ${fmtEta(progress.eta)}`}
+              {' · '}{ranking.length} grupos
+            </span>
+          )}
+          {status === 'done' && <span style={{color:'var(--green)'}}>✅ Completado · {ranking.length} grupos</span>}
+          {status === 'error' && <span style={{color:'var(--red)'}}>⚠️ {errorMsg}</span>}
+        </div>
+      </header>
+
+      {(isRunning || status === 'done') && progress && (
+        <div className="optim-page-progress">
+          <div className="progress-track" style={{borderRadius:0, height:3}}>
+            <div className="progress-fill" style={{width:`${pct}%`, transition:'width 0.5s ease'}}/>
+          </div>
+        </div>
+      )}
+
+      <div className="optim-page-body">
+
+        <div style={{background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:'var(--radius-lg)', padding:'20px 24px', marginBottom:20}}>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:24}}>
+
+            <div style={{display:'flex', flexDirection:'column', gap:14}}>
+              <div>
+                <div className="optim-label" style={{marginBottom:6}}>Archivo Excel (ranking Análisis Profundo Supertrend)</div>
+                <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleFile} style={{display:'none'}}/>
+                <div style={{display:'flex', alignItems:'center', gap:10}}>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    style={{...inputStyle, width:'auto', padding:'7px 14px', cursor:'pointer', background:'var(--bg-3)', fontFamily:'var(--font-ui)', fontWeight:600, fontSize:13, border:'1px solid var(--border-light)'}}>
+                    📂 Seleccionar archivo
+                  </button>
+                  {fileName
+                    ? <div style={{fontSize:12, fontFamily:'var(--font-mono)', lineHeight:1.4}}>
+                        <div style={{color:'var(--green)'}}>✓ {fileName}</div>
+                        <div style={{color:'var(--text-muted)'}}>{combos.length} combos válidos</div>
+                      </div>
+                    : <span style={{fontSize:12, color:'var(--text-muted)', fontFamily:'var(--font-mono)'}}>Sin archivo seleccionado</span>
+                  }
+                </div>
+              </div>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
+                <div>
+                  <div className="optim-label" style={{marginBottom:4}}>Desde</div>
+                  <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={inputStyle}/>
+                </div>
+                <div>
+                  <div className="optim-label" style={{marginBottom:4}}>Hasta</div>
+                  <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={inputStyle}/>
+                </div>
+              </div>
+              <button className="run-btn" style={{padding:'9px'}} onClick={handleLoadCandles} disabled={isLoadingCandles || isRunning}>
+                {isLoadingCandles ? <><span className="spinner"/> Cargando velas...</> : '📥 Cargar velas desde BD'}
+              </button>
+            </div>
+
+            <div style={{display:'flex', flexDirection:'column', gap:14}}>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
+                {[['Fee SL%','feeSlPct',0.01],['Fee TP%','feeTpPct',0.01],['Apalancamiento','leverage',1],['Capital inicial $','initialCapital',100]].map(([label, key, step]) => (
+                  <div key={key}>
+                    <div className="optim-label" style={{marginBottom:4}}>{label}</div>
+                    <input type="number" step={step} value={params[key]}
+                      onChange={e => setParams(p => ({...p, [key]: parseFloat(e.target.value)}))}
+                      style={inputStyle}/>
+                  </div>
+                ))}
+              </div>
+              <div style={{marginTop:'auto'}}>
+                {status === 'error' && (
+                  <div style={{marginBottom:8, padding:'8px 12px', background:'var(--red-dim)', border:'1px solid rgba(239,68,68,0.3)', borderRadius:'var(--radius)', fontSize:12, color:'var(--red)', fontFamily:'var(--font-mono)'}}>
+                    ⚠️ {errorMsg}
+                  </div>
+                )}
+                <button className="run-btn optim-btn" style={{width:'100%', padding:11}} onClick={handleRun} disabled={!canRun}>
+                  {isRunning
+                    ? <><span className="spinner"/> Analizando grupos de 3–15 combos Supertrend...</>
+                    : `🎲 Buscar mejores combinaciones (${combos.length} combos)`}
+                </button>
+                <div style={{fontSize:11, color:'var(--text-muted)', textAlign:'center', marginTop:6, fontFamily:'var(--font-mono)'}}>
+                  Grupos de 3 al 15 combos · 5 000 muestras por tamaño · drawdown ≤ 50%
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {combos.length > 0 && (
+          <div style={{marginBottom:16}}>
+            <button onClick={() => setShowCombos(v => !v)}
+              style={{background:'none', border:'none', color:'var(--text-muted)', fontSize:12, fontFamily:'var(--font-mono)', cursor:'pointer', padding:'4px 0', display:'flex', alignItems:'center', gap:6}}>
+              {showCombos ? '▼' : '▶'} Ver combos cargados ({combos.length})
+            </button>
+            {showCombos && (
+              <div className="table-wrap" style={{marginTop:8}}>
+                <table className="data-table">
+                  <thead>
+                    <tr><th>#</th><th>ATR Per.</th><th>Mult.</th><th>ATR Vol.</th><th>RSI</th><th>Body</th><th>TP%</th><th>SL%</th><th>Score</th></tr>
+                  </thead>
+                  <tbody>
+                    {combos.map((c, i) => (
+                      <tr key={i}>
+                        <td style={{color:'var(--text-muted)'}}>{i+1}</td>
+                        <td>{c.atrPeriod}</td>
+                        <td>{c.atrMultiplier}</td>
+                        <td>{c.atrVolFilter ?? 0}</td>
+                        <td>{c.rsiThreshold ?? 0}</td>
+                        <td>{c.bodyRatioMin ?? 0}</td>
+                        <td>{c.tpPct}</td>
+                        <td>{c.slPct}</td>
+                        <td style={{color:'var(--accent)', fontWeight:600}}>{parseFloat(c._score).toFixed(1)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {ranking.length > 0 && (
+          <>
+            <div className="optim-rank-meta" style={{display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:10}}>
+              <span>{sortedRanking.length} / {ranking.length} grupos · Score = Neto% ÷ Drawdown% · drawdown ≤ 50%{isRunning && ' · actualizando en vivo...'}</span>
+              <div style={{display:'flex', alignItems:'center', gap:8, fontSize:12, fontFamily:'var(--font-mono)'}}>
+                <span style={{color:'var(--text-muted)'}}>Trades:</span>
+                <input type="number" min={0} value={minTrades} onChange={e => setMinTrades(Math.max(0, parseInt(e.target.value) || 0))}
+                  style={{width:60, background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'var(--radius)', color:'var(--text)', padding:'3px 7px', fontFamily:'var(--font-mono)', fontSize:12, textAlign:'center'}}/>
+                <span style={{color:'var(--text-muted)'}}>–</span>
+                <input type="number" min={0} value={maxTrades} onChange={e => setMaxTrades(Math.max(0, parseInt(e.target.value) || 9999))}
+                  style={{width:60, background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'var(--radius)', color:'var(--text)', padding:'3px 7px', fontFamily:'var(--font-mono)', fontSize:12, textAlign:'center'}}/>
+              </div>
+            </div>
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <SortTh col="_score"          label="Score"/>
+                    <SortTh col="size"            label="Combos"/>
+                    <th>Parámetros</th>
+                    <SortTh col="totalClosed"     label="Trades"/>
+                    <SortTh col="winRate"         label="Win%"/>
+                    <SortTh col="totalNetPct"     label="Neto%"/>
+                    <SortTh col="maxDrawdownPct"  label="Drawdown%"/>
+                    <SortTh col="compoundCapital" label="Capital $"/>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedRanking.map((r, i) => {
+                    const net = parseFloat(r.totalNetPct)
+                    const dd  = parseFloat(r.maxDrawdownPct)
+                    const sizeColors = { 3:['var(--blue-dim)','var(--blue)'], 4:['var(--green-dim)','var(--green)'], 5:['var(--accent-dim)','var(--accent)'], 6:['var(--orange-dim)','var(--orange)'], 7:['var(--red-dim)','var(--red)'] }
+                    const [bgC, fgC] = sizeColors[r.size] ?? ['var(--bg-3)','var(--text)']
+                    return (
+                      <tr key={i} className="row-win">
+                        <td style={{color:'var(--text-muted)'}}>{i+1}</td>
+                        <td style={{color:'var(--accent)', fontWeight:700}}>{r._score.toFixed(2)}</td>
+                        <td style={{textAlign:'center'}}>
+                          <span style={{padding:'2px 10px', borderRadius:20, fontSize:11, fontWeight:600, background:bgC, color:fgC}}>{r.size}</span>
+                        </td>
+                        <td style={{fontSize:10, lineHeight:1.8}}>
+                          {r.combos.map((c, ci) => (
+                            <div key={ci} style={{whiteSpace:'nowrap'}}>
+                              <span style={{color:'var(--text-muted)', marginRight:5}}>#{c.idx+1}</span>
+                              <span style={{color:'var(--text-dim)'}}>{comboLabel(c)}</span>
+                            </div>
+                          ))}
+                        </td>
+                        <td>{r.totalClosed}</td>
+                        <td>{r.winRate}%</td>
+                        <td className={net >= 0 ? 'tp-cell' : 'sl-cell'}>{r.totalNetPct}%</td>
+                        <td className={dd > 30 ? 'sl-cell' : ''}>{r.maxDrawdownPct}%</td>
+                        <td style={{fontWeight:600}}>
+                          ${parseFloat(r.compoundCapital).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
-  if (isEmaExcelOptimMode)     return <EmaExcelOptimView />
-  if (isEmaOptimMode)          return <EmaOptimView />
+  if (isEmaExcelOptimMode)          return <EmaExcelOptimView />
+  if (isEmaOptimMode)               return <EmaOptimView />
   if (isSoporteOptimMode)      return <SoporteOptimView />
   if (isSoporteExcelOptimMode) return <SoporteExcelOptimView />
   if (isPinBarOptimMode)       return <PinBarOptimView />
   if (isEmaPullbackOptimMode)  return <EmaPullbackOptimView />
   if (isConfluenceOptimMode)   return <ConfluenceOptimView />
-  if (isSupertrendOptimMode)   return <SupertrendOptimView />
-  if (isSarOptimMode)          return <SarOptimView />
+  if (isSupertrendOptimMode)      return <SupertrendOptimView />
+  if (isSupertrendExcelOptimMode) return <SupertrendExcelOptimView />
+  if (isSarOptimMode)             return <SarOptimView />
   if (isOptimMode)             return <OptimView />
   if (isMultiOptimMode)        return <MultiOptimView />
   if (isExcelOptimMode)        return <ExcelOptimView />
   if (isPortfolioMode)         return <RangoResistenciaPortfolioView />
   if (isEmaMode)               return <EmaView />
+  if (isRangeHighMode)         return <RangeHighView />
   if (isSoporteMode)           return <SoporteView />
   if (isPinBarMode)            return <PinBarView />
   if (isEmaPullbackMode)       return <EmaPullbackView />

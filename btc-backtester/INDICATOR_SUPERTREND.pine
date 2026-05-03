@@ -1,0 +1,699 @@
+//@version=5
+indicator("15 Combos Supertrend Multi-Estrategia", overlay=true, max_labels_count=500)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PARÁMETROS GLOBALES
+// ═══════════════════════════════════════════════════════════════════════════
+grp_g = "Configuración Global"
+trade_dir = input.string("Ambas", "Dirección de trades", options=["Ambas","Solo Long","Solo Short"], group=grp_g)
+skip_sun  = input.bool(true,  "Omitir domingos (UTC)", group=grp_g)
+atr_vp    = input.int(20,    "SMA ATR vol (barras)",   minval=1, group=grp_g)
+rsi_p     = input.int(14,    "Período RSI",             minval=1, group=grp_g)
+
+grp_st = "Estadísticas"
+fee_sl = input.float(0.10,   "Fee extra SL (%)",           minval=0.0, step=0.01, group=grp_st)
+fee_tp = input.float(0.05,   "Fee descontado TP (%)",      minval=0.0, step=0.01, group=grp_st)
+lev    = input.float(10.0,   "Apalancamiento",              minval=1.0, step=1.0,  group=grp_st)
+cap0   = input.float(1000.0, "Capital inicial (compuesto)", minval=1.0, step=100.0, group=grp_st)
+
+grp_vis = "Apariencia"
+show_st  = input.bool(true, "Mostrar líneas Supertrend",    group=grp_vis)
+show_sig = input.bool(true, "Mostrar marcas de señal",      group=grp_vis)
+show_trd = input.bool(true, "Mostrar líneas Entrada/TP/SL", group=grp_vis)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMBO 1  P8 M6.0 V1.5 R0 B1.0 TP2.45 SL2.60
+// ═══════════════════════════════════════════════════════════════════════════
+grp1 = "Combo 1  P8 M6.0 V1.5 R0 B1.0"
+uc1  = input.bool(true,  "Act C1",   group=grp1)
+p1   = input.int(8,      "ATR Per",  group=grp1, minval=1)
+m1   = input.float(6.0,  "ATR Mult", group=grp1, minval=0.1, step=0.5)
+vf1  = input.float(1.5,  "ATR VolF", group=grp1, minval=0.0, step=0.1)
+rt1  = input.float(0.0,  "RSI Thr",  group=grp1, minval=0.0, step=5.0)
+bm1  = input.float(1.0,  "Body Min", group=grp1, minval=0.0, step=0.1)
+tp1  = input.float(2.45, "TP %",     group=grp1, minval=0.01, step=0.05)
+sl1  = input.float(2.6,  "SL %",     group=grp1, minval=0.01, step=0.05)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMBO 2  P11 M5.0 V2.0 R0 B1.0 TP1.25 SL2.90
+// ═══════════════════════════════════════════════════════════════════════════
+grp2 = "Combo 2  P11 M5.0 V2.0 R0 B1.0"
+uc2  = input.bool(true,  "Act C2",   group=grp2)
+p2   = input.int(11,     "ATR Per",  group=grp2, minval=1)
+m2   = input.float(5.0,  "ATR Mult", group=grp2, minval=0.1, step=0.5)
+vf2  = input.float(2.0,  "ATR VolF", group=grp2, minval=0.0, step=0.1)
+rt2  = input.float(0.0,  "RSI Thr",  group=grp2, minval=0.0, step=5.0)
+bm2  = input.float(1.0,  "Body Min", group=grp2, minval=0.0, step=0.1)
+tp2  = input.float(1.25, "TP %",     group=grp2, minval=0.01, step=0.05)
+sl2  = input.float(2.9,  "SL %",     group=grp2, minval=0.01, step=0.05)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMBO 3  P14 M6.5 V1.0 R70 B0.9 TP1.05 SL2.90
+// ═══════════════════════════════════════════════════════════════════════════
+grp3 = "Combo 3  P14 M6.5 V1.0 R70 B0.9"
+uc3  = input.bool(true,  "Act C3",   group=grp3)
+p3   = input.int(14,     "ATR Per",  group=grp3, minval=1)
+m3   = input.float(6.5,  "ATR Mult", group=grp3, minval=0.1, step=0.5)
+vf3  = input.float(1.0,  "ATR VolF", group=grp3, minval=0.0, step=0.1)
+rt3  = input.float(70.0, "RSI Thr",  group=grp3, minval=0.0, step=5.0)
+bm3  = input.float(0.9,  "Body Min", group=grp3, minval=0.0, step=0.1)
+tp3  = input.float(1.05, "TP %",     group=grp3, minval=0.01, step=0.05)
+sl3  = input.float(2.9,  "SL %",     group=grp3, minval=0.01, step=0.05)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMBO 4  P8 M3.5 V1.0 R60 B0.8 TP0.45 SL2.90
+// ═══════════════════════════════════════════════════════════════════════════
+grp4 = "Combo 4  P8 M3.5 V1.0 R60 B0.8"
+uc4  = input.bool(true,  "Act C4",   group=grp4)
+p4   = input.int(8,      "ATR Per",  group=grp4, minval=1)
+m4   = input.float(3.5,  "ATR Mult", group=grp4, minval=0.1, step=0.5)
+vf4  = input.float(1.0,  "ATR VolF", group=grp4, minval=0.0, step=0.1)
+rt4  = input.float(60.0, "RSI Thr",  group=grp4, minval=0.0, step=5.0)
+bm4  = input.float(0.8,  "Body Min", group=grp4, minval=0.0, step=0.1)
+tp4  = input.float(0.45, "TP %",     group=grp4, minval=0.01, step=0.05)
+sl4  = input.float(2.9,  "SL %",     group=grp4, minval=0.01, step=0.05)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMBO 5  P17 M2.5 V0.0 R55 B1.0 TP2.25 SL2.10
+// ═══════════════════════════════════════════════════════════════════════════
+grp5 = "Combo 5  P17 M2.5 V0.0 R55 B1.0"
+uc5  = input.bool(true,  "Act C5",   group=grp5)
+p5   = input.int(17,     "ATR Per",  group=grp5, minval=1)
+m5   = input.float(2.5,  "ATR Mult", group=grp5, minval=0.1, step=0.5)
+vf5  = input.float(0.0,  "ATR VolF", group=grp5, minval=0.0, step=0.1)
+rt5  = input.float(55.0, "RSI Thr",  group=grp5, minval=0.0, step=5.0)
+bm5  = input.float(1.0,  "Body Min", group=grp5, minval=0.0, step=0.1)
+tp5  = input.float(2.25, "TP %",     group=grp5, minval=0.01, step=0.05)
+sl5  = input.float(2.1,  "SL %",     group=grp5, minval=0.01, step=0.05)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMBO 6  P14 M3.5 V0.0 R50 B0.8 TP2.95 SL2.70
+// ═══════════════════════════════════════════════════════════════════════════
+grp6 = "Combo 6  P14 M3.5 V0.0 R50 B0.8"
+uc6  = input.bool(true,  "Act C6",   group=grp6)
+p6   = input.int(14,     "ATR Per",  group=grp6, minval=1)
+m6   = input.float(3.5,  "ATR Mult", group=grp6, minval=0.1, step=0.5)
+vf6  = input.float(0.0,  "ATR VolF", group=grp6, minval=0.0, step=0.1)
+rt6  = input.float(50.0, "RSI Thr",  group=grp6, minval=0.0, step=5.0)
+bm6  = input.float(0.8,  "Body Min", group=grp6, minval=0.0, step=0.1)
+tp6  = input.float(2.95, "TP %",     group=grp6, minval=0.01, step=0.05)
+sl6  = input.float(2.7,  "SL %",     group=grp6, minval=0.01, step=0.05)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMBO 7  P8 M6.0 V1.0 R65 B0.1 TP0.35 SL2.40
+// ═══════════════════════════════════════════════════════════════════════════
+grp7 = "Combo 7  P8 M6.0 V1.0 R65 B0.1"
+uc7  = input.bool(true,  "Act C7",   group=grp7)
+p7   = input.int(8,      "ATR Per",  group=grp7, minval=1)
+m7   = input.float(6.0,  "ATR Mult", group=grp7, minval=0.1, step=0.5)
+vf7  = input.float(1.0,  "ATR VolF", group=grp7, minval=0.0, step=0.1)
+rt7  = input.float(65.0, "RSI Thr",  group=grp7, minval=0.0, step=5.0)
+bm7  = input.float(0.1,  "Body Min", group=grp7, minval=0.0, step=0.1)
+tp7  = input.float(0.35, "TP %",     group=grp7, minval=0.01, step=0.05)
+sl7  = input.float(2.4,  "SL %",     group=grp7, minval=0.01, step=0.05)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMBO 8  P11 M1.0 V2.0 R25 B0.3 TP1.05 SL2.40
+// ═══════════════════════════════════════════════════════════════════════════
+grp8 = "Combo 8  P11 M1.0 V2.0 R25 B0.3"
+uc8  = input.bool(true,  "Act C8",   group=grp8)
+p8   = input.int(11,     "ATR Per",  group=grp8, minval=1)
+m8   = input.float(1.0,  "ATR Mult", group=grp8, minval=0.1, step=0.5)
+vf8  = input.float(2.0,  "ATR VolF", group=grp8, minval=0.0, step=0.1)
+rt8  = input.float(25.0, "RSI Thr",  group=grp8, minval=0.0, step=5.0)
+bm8  = input.float(0.3,  "Body Min", group=grp8, minval=0.0, step=0.1)
+tp8  = input.float(1.05, "TP %",     group=grp8, minval=0.01, step=0.05)
+sl8  = input.float(2.4,  "SL %",     group=grp8, minval=0.01, step=0.05)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMBO 9  P8 M9.5 V1.0 R0 B0.8 TP0.75 SL2.80
+// ═══════════════════════════════════════════════════════════════════════════
+grp9 = "Combo 9  P8 M9.5 V1.0 R0 B0.8"
+uc9  = input.bool(true,  "Act C9",   group=grp9)
+p9   = input.int(8,      "ATR Per",  group=grp9, minval=1)
+m9   = input.float(9.5,  "ATR Mult", group=grp9, minval=0.1, step=0.5)
+vf9  = input.float(1.0,  "ATR VolF", group=grp9, minval=0.0, step=0.1)
+rt9  = input.float(0.0,  "RSI Thr",  group=grp9, minval=0.0, step=5.0)
+bm9  = input.float(0.8,  "Body Min", group=grp9, minval=0.0, step=0.1)
+tp9  = input.float(0.75, "TP %",     group=grp9, minval=0.01, step=0.05)
+sl9  = input.float(2.8,  "SL %",     group=grp9, minval=0.01, step=0.05)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMBO 10  P5 M6.5 V0.0 R0 B1.0 TP2.65 SL1.90
+// ═══════════════════════════════════════════════════════════════════════════
+grp10 = "Combo 10  P5 M6.5 V0.0 R0 B1.0"
+uc10  = input.bool(true,  "Act C10",  group=grp10)
+p10   = input.int(5,      "ATR Per",  group=grp10, minval=1)
+m10   = input.float(6.5,  "ATR Mult", group=grp10, minval=0.1, step=0.5)
+vf10  = input.float(0.0,  "ATR VolF", group=grp10, minval=0.0, step=0.1)
+rt10  = input.float(0.0,  "RSI Thr",  group=grp10, minval=0.0, step=5.0)
+bm10  = input.float(1.0,  "Body Min", group=grp10, minval=0.0, step=0.1)
+tp10  = input.float(2.65, "TP %",     group=grp10, minval=0.01, step=0.05)
+sl10  = input.float(1.9,  "SL %",     group=grp10, minval=0.01, step=0.05)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMBO 11  P14 M3.5 V0.0 R50 B0.8 TP3.35 SL2.90
+// ═══════════════════════════════════════════════════════════════════════════
+grp11 = "Combo 11  P14 M3.5 V0.0 R50 B0.8"
+uc11  = input.bool(true,  "Act C11",  group=grp11)
+p11   = input.int(14,     "ATR Per",  group=grp11, minval=1)
+m11   = input.float(3.5,  "ATR Mult", group=grp11, minval=0.1, step=0.5)
+vf11  = input.float(0.0,  "ATR VolF", group=grp11, minval=0.0, step=0.1)
+rt11  = input.float(50.0, "RSI Thr",  group=grp11, minval=0.0, step=5.0)
+bm11  = input.float(0.8,  "Body Min", group=grp11, minval=0.0, step=0.1)
+tp11  = input.float(3.35, "TP %",     group=grp11, minval=0.01, step=0.05)
+sl11  = input.float(2.9,  "SL %",     group=grp11, minval=0.01, step=0.05)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMBO 12  P11 M1.5 V2.0 R30 B0.0 TP1.65 SL2.20
+// ═══════════════════════════════════════════════════════════════════════════
+grp12 = "Combo 12  P11 M1.5 V2.0 R30 B0.0"
+uc12  = input.bool(true,  "Act C12",  group=grp12)
+p12   = input.int(11,     "ATR Per",  group=grp12, minval=1)
+m12   = input.float(1.5,  "ATR Mult", group=grp12, minval=0.1, step=0.5)
+vf12  = input.float(2.0,  "ATR VolF", group=grp12, minval=0.0, step=0.1)
+rt12  = input.float(30.0, "RSI Thr",  group=grp12, minval=0.0, step=5.0)
+bm12  = input.float(0.0,  "Body Min", group=grp12, minval=0.0, step=0.1)
+tp12  = input.float(1.65, "TP %",     group=grp12, minval=0.01, step=0.05)
+sl12  = input.float(2.2,  "SL %",     group=grp12, minval=0.01, step=0.05)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMBO 13  P14 M6.5 V1.0 R0 B0.9 TP0.75 SL2.90
+// ═══════════════════════════════════════════════════════════════════════════
+grp13 = "Combo 13  P14 M6.5 V1.0 R0 B0.9"
+uc13  = input.bool(true,  "Act C13",  group=grp13)
+p13   = input.int(14,     "ATR Per",  group=grp13, minval=1)
+m13   = input.float(6.5,  "ATR Mult", group=grp13, minval=0.1, step=0.5)
+vf13  = input.float(1.0,  "ATR VolF", group=grp13, minval=0.0, step=0.1)
+rt13  = input.float(0.0,  "RSI Thr",  group=grp13, minval=0.0, step=5.0)
+bm13  = input.float(0.9,  "Body Min", group=grp13, minval=0.0, step=0.1)
+tp13  = input.float(0.75, "TP %",     group=grp13, minval=0.01, step=0.05)
+sl13  = input.float(2.9,  "SL %",     group=grp13, minval=0.01, step=0.05)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMBO 14  P11 M7.5 V1.0 R70 B0.8 TP0.75 SL2.40
+// ═══════════════════════════════════════════════════════════════════════════
+grp14 = "Combo 14  P11 M7.5 V1.0 R70 B0.8"
+uc14  = input.bool(true,  "Act C14",  group=grp14)
+p14   = input.int(11,     "ATR Per",  group=grp14, minval=1)
+m14   = input.float(7.5,  "ATR Mult", group=grp14, minval=0.1, step=0.5)
+vf14  = input.float(1.0,  "ATR VolF", group=grp14, minval=0.0, step=0.1)
+rt14  = input.float(70.0, "RSI Thr",  group=grp14, minval=0.0, step=5.0)
+bm14  = input.float(0.8,  "Body Min", group=grp14, minval=0.0, step=0.1)
+tp14  = input.float(0.75, "TP %",     group=grp14, minval=0.01, step=0.05)
+sl14  = input.float(2.4,  "SL %",     group=grp14, minval=0.01, step=0.05)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMBO 15  P5 M7.0 V1.0 R65 B0.8 TP1.35 SL2.80
+// ═══════════════════════════════════════════════════════════════════════════
+grp15 = "Combo 15  P5 M7.0 V1.0 R65 B0.8"
+uc15  = input.bool(true,  "Act C15",  group=grp15)
+p15   = input.int(5,      "ATR Per",  group=grp15, minval=1)
+m15   = input.float(7.0,  "ATR Mult", group=grp15, minval=0.1, step=0.5)
+vf15  = input.float(1.0,  "ATR VolF", group=grp15, minval=0.0, step=0.1)
+rt15  = input.float(65.0, "RSI Thr",  group=grp15, minval=0.0, step=5.0)
+bm15  = input.float(0.8,  "Body Min", group=grp15, minval=0.0, step=0.1)
+tp15  = input.float(1.35, "TP %",     group=grp15, minval=0.01, step=0.05)
+sl15  = input.float(2.8,  "SL %",     group=grp15, minval=0.01, step=0.05)
+
+// Webhook
+grp_wh  = "Webhook"
+wh_acct = input.string("SUPERTREND_15", "Account ID", group=grp_wh)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CÁLCULOS COMPARTIDOS
+// ═══════════════════════════════════════════════════════════════════════════
+rsi      = ta.rsi(close, rsi_p)
+body_r   = (high - low) > 0 ? math.abs(close - open) / (high - low) : 0.0
+is_sun   = dayofweek == dayofweek.sunday
+can_long = trade_dir != "Solo Short"
+can_sht  = trade_dir != "Solo Long"
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SUPERTREND POR COMBO
+// Pine: direction = -1 cuando alcista (bullish), direction = 1 cuando bajista
+// LONG cross  : direction pasa de  1 → -1
+// SHORT cross : direction pasa de -1 →  1
+// ═══════════════════════════════════════════════════════════════════════════
+[st1,  d1]  = ta.supertrend(m1,  p1)
+[st2,  d2]  = ta.supertrend(m2,  p2)
+[st3,  d3]  = ta.supertrend(m3,  p3)
+[st4,  d4]  = ta.supertrend(m4,  p4)
+[st5,  d5]  = ta.supertrend(m5,  p5)
+[st6,  d6]  = ta.supertrend(m6,  p6)
+[st7,  d7]  = ta.supertrend(m7,  p7)
+[st8,  d8]  = ta.supertrend(m8,  p8)
+[st9,  d9]  = ta.supertrend(m9,  p9)
+[st10, d10] = ta.supertrend(m10, p10)
+[st11, d11] = ta.supertrend(m11, p11)
+[st12, d12] = ta.supertrend(m12, p12)
+[st13, d13] = ta.supertrend(m13, p13)
+[st14, d14] = ta.supertrend(m14, p14)
+[st15, d15] = ta.supertrend(m15, p15)
+
+// ATR raw para vol filter
+a1   = ta.atr(p1)
+ab1  = ta.sma(a1,  atr_vp)
+a2   = ta.atr(p2)
+ab2  = ta.sma(a2,  atr_vp)
+a3   = ta.atr(p3)
+ab3  = ta.sma(a3,  atr_vp)
+a4   = ta.atr(p4)
+ab4  = ta.sma(a4,  atr_vp)
+a5   = ta.atr(p5)
+ab5  = ta.sma(a5,  atr_vp)
+a6   = ta.atr(p6)
+ab6  = ta.sma(a6,  atr_vp)
+a7   = ta.atr(p7)
+ab7  = ta.sma(a7,  atr_vp)
+a8   = ta.atr(p8)
+ab8  = ta.sma(a8,  atr_vp)
+a9   = ta.atr(p9)
+ab9  = ta.sma(a9,  atr_vp)
+a10  = ta.atr(p10)
+ab10 = ta.sma(a10, atr_vp)
+a11  = ta.atr(p11)
+ab11 = ta.sma(a11, atr_vp)
+a12  = ta.atr(p12)
+ab12 = ta.sma(a12, atr_vp)
+a13  = ta.atr(p13)
+ab13 = ta.sma(a13, atr_vp)
+a14  = ta.atr(p14)
+ab14 = ta.sma(a14, atr_vp)
+a15  = ta.atr(p15)
+ab15 = ta.sma(a15, atr_vp)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SEÑALES POR COMBO (ls = long signal, ss = short signal)
+// ═══════════════════════════════════════════════════════════════════════════
+ls1  = uc1  and d1  == -1 and d1[1]  == 1  and (vf1  == 0 or (not na(ab1)  and a1  <= vf1  * ab1))  and (rt1  == 0 or (not na(rsi) and rsi <= rt1))          and (bm1  == 0 or body_r >= bm1)  and can_long and (not skip_sun or not is_sun)
+ss1  = uc1  and d1  ==  1 and d1[1]  == -1 and (vf1  == 0 or (not na(ab1)  and a1  <= vf1  * ab1))  and (rt1  == 0 or (not na(rsi) and rsi >= (100 - rt1)))  and (bm1  == 0 or body_r >= bm1)  and can_sht  and (not skip_sun or not is_sun)
+ls2  = uc2  and d2  == -1 and d2[1]  == 1  and (vf2  == 0 or (not na(ab2)  and a2  <= vf2  * ab2))  and (rt2  == 0 or (not na(rsi) and rsi <= rt2))          and (bm2  == 0 or body_r >= bm2)  and can_long and (not skip_sun or not is_sun)
+ss2  = uc2  and d2  ==  1 and d2[1]  == -1 and (vf2  == 0 or (not na(ab2)  and a2  <= vf2  * ab2))  and (rt2  == 0 or (not na(rsi) and rsi >= (100 - rt2)))  and (bm2  == 0 or body_r >= bm2)  and can_sht  and (not skip_sun or not is_sun)
+ls3  = uc3  and d3  == -1 and d3[1]  == 1  and (vf3  == 0 or (not na(ab3)  and a3  <= vf3  * ab3))  and (rt3  == 0 or (not na(rsi) and rsi <= rt3))          and (bm3  == 0 or body_r >= bm3)  and can_long and (not skip_sun or not is_sun)
+ss3  = uc3  and d3  ==  1 and d3[1]  == -1 and (vf3  == 0 or (not na(ab3)  and a3  <= vf3  * ab3))  and (rt3  == 0 or (not na(rsi) and rsi >= (100 - rt3)))  and (bm3  == 0 or body_r >= bm3)  and can_sht  and (not skip_sun or not is_sun)
+ls4  = uc4  and d4  == -1 and d4[1]  == 1  and (vf4  == 0 or (not na(ab4)  and a4  <= vf4  * ab4))  and (rt4  == 0 or (not na(rsi) and rsi <= rt4))          and (bm4  == 0 or body_r >= bm4)  and can_long and (not skip_sun or not is_sun)
+ss4  = uc4  and d4  ==  1 and d4[1]  == -1 and (vf4  == 0 or (not na(ab4)  and a4  <= vf4  * ab4))  and (rt4  == 0 or (not na(rsi) and rsi >= (100 - rt4)))  and (bm4  == 0 or body_r >= bm4)  and can_sht  and (not skip_sun or not is_sun)
+ls5  = uc5  and d5  == -1 and d5[1]  == 1  and (vf5  == 0 or (not na(ab5)  and a5  <= vf5  * ab5))  and (rt5  == 0 or (not na(rsi) and rsi <= rt5))          and (bm5  == 0 or body_r >= bm5)  and can_long and (not skip_sun or not is_sun)
+ss5  = uc5  and d5  ==  1 and d5[1]  == -1 and (vf5  == 0 or (not na(ab5)  and a5  <= vf5  * ab5))  and (rt5  == 0 or (not na(rsi) and rsi >= (100 - rt5)))  and (bm5  == 0 or body_r >= bm5)  and can_sht  and (not skip_sun or not is_sun)
+ls6  = uc6  and d6  == -1 and d6[1]  == 1  and (vf6  == 0 or (not na(ab6)  and a6  <= vf6  * ab6))  and (rt6  == 0 or (not na(rsi) and rsi <= rt6))          and (bm6  == 0 or body_r >= bm6)  and can_long and (not skip_sun or not is_sun)
+ss6  = uc6  and d6  ==  1 and d6[1]  == -1 and (vf6  == 0 or (not na(ab6)  and a6  <= vf6  * ab6))  and (rt6  == 0 or (not na(rsi) and rsi >= (100 - rt6)))  and (bm6  == 0 or body_r >= bm6)  and can_sht  and (not skip_sun or not is_sun)
+ls7  = uc7  and d7  == -1 and d7[1]  == 1  and (vf7  == 0 or (not na(ab7)  and a7  <= vf7  * ab7))  and (rt7  == 0 or (not na(rsi) and rsi <= rt7))          and (bm7  == 0 or body_r >= bm7)  and can_long and (not skip_sun or not is_sun)
+ss7  = uc7  and d7  ==  1 and d7[1]  == -1 and (vf7  == 0 or (not na(ab7)  and a7  <= vf7  * ab7))  and (rt7  == 0 or (not na(rsi) and rsi >= (100 - rt7)))  and (bm7  == 0 or body_r >= bm7)  and can_sht  and (not skip_sun or not is_sun)
+ls8  = uc8  and d8  == -1 and d8[1]  == 1  and (vf8  == 0 or (not na(ab8)  and a8  <= vf8  * ab8))  and (rt8  == 0 or (not na(rsi) and rsi <= rt8))          and (bm8  == 0 or body_r >= bm8)  and can_long and (not skip_sun or not is_sun)
+ss8  = uc8  and d8  ==  1 and d8[1]  == -1 and (vf8  == 0 or (not na(ab8)  and a8  <= vf8  * ab8))  and (rt8  == 0 or (not na(rsi) and rsi >= (100 - rt8)))  and (bm8  == 0 or body_r >= bm8)  and can_sht  and (not skip_sun or not is_sun)
+ls9  = uc9  and d9  == -1 and d9[1]  == 1  and (vf9  == 0 or (not na(ab9)  and a9  <= vf9  * ab9))  and (rt9  == 0 or (not na(rsi) and rsi <= rt9))          and (bm9  == 0 or body_r >= bm9)  and can_long and (not skip_sun or not is_sun)
+ss9  = uc9  and d9  ==  1 and d9[1]  == -1 and (vf9  == 0 or (not na(ab9)  and a9  <= vf9  * ab9))  and (rt9  == 0 or (not na(rsi) and rsi >= (100 - rt9)))  and (bm9  == 0 or body_r >= bm9)  and can_sht  and (not skip_sun or not is_sun)
+ls10 = uc10 and d10 == -1 and d10[1] == 1  and (vf10 == 0 or (not na(ab10) and a10 <= vf10 * ab10)) and (rt10 == 0 or (not na(rsi) and rsi <= rt10))         and (bm10 == 0 or body_r >= bm10) and can_long and (not skip_sun or not is_sun)
+ss10 = uc10 and d10 ==  1 and d10[1] == -1 and (vf10 == 0 or (not na(ab10) and a10 <= vf10 * ab10)) and (rt10 == 0 or (not na(rsi) and rsi >= (100 - rt10))) and (bm10 == 0 or body_r >= bm10) and can_sht  and (not skip_sun or not is_sun)
+ls11 = uc11 and d11 == -1 and d11[1] == 1  and (vf11 == 0 or (not na(ab11) and a11 <= vf11 * ab11)) and (rt11 == 0 or (not na(rsi) and rsi <= rt11))         and (bm11 == 0 or body_r >= bm11) and can_long and (not skip_sun or not is_sun)
+ss11 = uc11 and d11 ==  1 and d11[1] == -1 and (vf11 == 0 or (not na(ab11) and a11 <= vf11 * ab11)) and (rt11 == 0 or (not na(rsi) and rsi >= (100 - rt11))) and (bm11 == 0 or body_r >= bm11) and can_sht  and (not skip_sun or not is_sun)
+ls12 = uc12 and d12 == -1 and d12[1] == 1  and (vf12 == 0 or (not na(ab12) and a12 <= vf12 * ab12)) and (rt12 == 0 or (not na(rsi) and rsi <= rt12))         and (bm12 == 0 or body_r >= bm12) and can_long and (not skip_sun or not is_sun)
+ss12 = uc12 and d12 ==  1 and d12[1] == -1 and (vf12 == 0 or (not na(ab12) and a12 <= vf12 * ab12)) and (rt12 == 0 or (not na(rsi) and rsi >= (100 - rt12))) and (bm12 == 0 or body_r >= bm12) and can_sht  and (not skip_sun or not is_sun)
+ls13 = uc13 and d13 == -1 and d13[1] == 1  and (vf13 == 0 or (not na(ab13) and a13 <= vf13 * ab13)) and (rt13 == 0 or (not na(rsi) and rsi <= rt13))         and (bm13 == 0 or body_r >= bm13) and can_long and (not skip_sun or not is_sun)
+ss13 = uc13 and d13 ==  1 and d13[1] == -1 and (vf13 == 0 or (not na(ab13) and a13 <= vf13 * ab13)) and (rt13 == 0 or (not na(rsi) and rsi >= (100 - rt13))) and (bm13 == 0 or body_r >= bm13) and can_sht  and (not skip_sun or not is_sun)
+ls14 = uc14 and d14 == -1 and d14[1] == 1  and (vf14 == 0 or (not na(ab14) and a14 <= vf14 * ab14)) and (rt14 == 0 or (not na(rsi) and rsi <= rt14))         and (bm14 == 0 or body_r >= bm14) and can_long and (not skip_sun or not is_sun)
+ss14 = uc14 and d14 ==  1 and d14[1] == -1 and (vf14 == 0 or (not na(ab14) and a14 <= vf14 * ab14)) and (rt14 == 0 or (not na(rsi) and rsi >= (100 - rt14))) and (bm14 == 0 or body_r >= bm14) and can_sht  and (not skip_sun or not is_sun)
+ls15 = uc15 and d15 == -1 and d15[1] == 1  and (vf15 == 0 or (not na(ab15) and a15 <= vf15 * ab15)) and (rt15 == 0 or (not na(rsi) and rsi <= rt15))         and (bm15 == 0 or body_r >= bm15) and can_long and (not skip_sun or not is_sun)
+ss15 = uc15 and d15 ==  1 and d15[1] == -1 and (vf15 == 0 or (not na(ab15) and a15 <= vf15 * ab15)) and (rt15 == 0 or (not na(rsi) and rsi >= (100 - rt15))) and (bm15 == 0 or body_r >= bm15) and can_sht  and (not skip_sun or not is_sun)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ESTADO DEL TRADE (1 trade a la vez — primer combo que dispara gana)
+// ═══════════════════════════════════════════════════════════════════════════
+var float entry_price = na
+var float tp_price    = na
+var float sl_price    = na
+var bool  trade_open  = false
+var bool  is_long     = false
+var int   entry_bar   = -1
+var float eff_tp      = 0.0
+var float eff_sl      = 0.0
+var string trd_result = "Sin trade"
+
+var bool op1  = false
+var bool op2  = false
+var bool op3  = false
+var bool op4  = false
+var bool op5  = false
+var bool op6  = false
+var bool op7  = false
+var bool op8  = false
+var bool op9  = false
+var bool op10 = false
+var bool op11 = false
+var bool op12 = false
+var bool op13 = false
+var bool op14 = false
+var bool op15 = false
+
+op1  := false
+op2  := false
+op3  := false
+op4  := false
+op5  := false
+op6  := false
+op7  := false
+op8  := false
+op9  := false
+op10 := false
+op11 := false
+op12 := false
+op13 := false
+op14 := false
+op15 := false
+
+var int   tot_tp  = 0
+var int   tot_sl  = 0
+var int   tot_cl  = 0
+var float prof    = 0.0
+var float loss    = 0.0
+var float net     = 0.0
+var float eq      = 0.0
+var float eq_pk   = 0.0
+var float max_dd  = 0.0
+var float cmp_cap = na
+var float smp_cap = na
+
+if barstate.isfirst
+    cmp_cap := cap0
+    smp_cap := cap0
+
+// ─── Evaluar TP/SL (no en la vela de apertura) ───────────────────────────
+tp_hit = trade_open and bar_index != entry_bar and (is_long ? high >= tp_price : low  <= tp_price)
+sl_hit = trade_open and bar_index != entry_bar and not tp_hit and (is_long ? low <= sl_price : high >= sl_price)
+
+if tp_hit
+    trade_open  := false
+    entry_price := na
+    tp_price    := na
+    sl_price    := na
+    trd_result  := "TP ✅"
+    tot_tp      += 1
+    tot_cl      += 1
+    prof        += eff_tp
+    net         := prof - loss
+    eq          += eff_tp
+    eq_pk       := math.max(eq_pk, eq)
+    max_dd      := math.max(max_dd, eq_pk - eq)
+    smp_cap     := cap0 * (1 + net / 100)
+    cmp_cap     := cmp_cap * (1 + eff_tp / 100)
+
+else if sl_hit
+    trade_open  := false
+    entry_price := na
+    tp_price    := na
+    sl_price    := na
+    trd_result  := "SL ❌"
+    tot_sl      += 1
+    tot_cl      += 1
+    loss        += eff_sl
+    net         := prof - loss
+    eq          -= eff_sl
+    eq_pk       := math.max(eq_pk, eq)
+    max_dd      := math.max(max_dd, eq_pk - eq)
+    smp_cap     := cap0 * (1 + net / 100)
+    cmp_cap     := cmp_cap * (1 - eff_sl / 100)
+
+// ─── Abrir trade — primer combo en orden de prioridad ────────────────────
+if not trade_open
+    if ls1 or ss1
+        is_long     := ls1
+        entry_price := close
+        tp_price    := ls1 ? close * (1 + tp1 / 100) : close * (1 - tp1 / 100)
+        sl_price    := ls1 ? close * (1 - sl1 / 100) : close * (1 + sl1 / 100)
+        eff_tp      := math.max(tp1 - fee_tp, 0) * lev
+        eff_sl      := (sl1 + fee_sl) * lev
+        trade_open  := true
+        entry_bar   := bar_index
+        trd_result  := ls1 ? "LONG (C1)" : "SHORT (C1)"
+        op1         := true
+    else if ls2 or ss2
+        is_long     := ls2
+        entry_price := close
+        tp_price    := ls2 ? close * (1 + tp2 / 100) : close * (1 - tp2 / 100)
+        sl_price    := ls2 ? close * (1 - sl2 / 100) : close * (1 + sl2 / 100)
+        eff_tp      := math.max(tp2 - fee_tp, 0) * lev
+        eff_sl      := (sl2 + fee_sl) * lev
+        trade_open  := true
+        entry_bar   := bar_index
+        trd_result  := ls2 ? "LONG (C2)" : "SHORT (C2)"
+        op2         := true
+    else if ls3 or ss3
+        is_long     := ls3
+        entry_price := close
+        tp_price    := ls3 ? close * (1 + tp3 / 100) : close * (1 - tp3 / 100)
+        sl_price    := ls3 ? close * (1 - sl3 / 100) : close * (1 + sl3 / 100)
+        eff_tp      := math.max(tp3 - fee_tp, 0) * lev
+        eff_sl      := (sl3 + fee_sl) * lev
+        trade_open  := true
+        entry_bar   := bar_index
+        trd_result  := ls3 ? "LONG (C3)" : "SHORT (C3)"
+        op3         := true
+    else if ls4 or ss4
+        is_long     := ls4
+        entry_price := close
+        tp_price    := ls4 ? close * (1 + tp4 / 100) : close * (1 - tp4 / 100)
+        sl_price    := ls4 ? close * (1 - sl4 / 100) : close * (1 + sl4 / 100)
+        eff_tp      := math.max(tp4 - fee_tp, 0) * lev
+        eff_sl      := (sl4 + fee_sl) * lev
+        trade_open  := true
+        entry_bar   := bar_index
+        trd_result  := ls4 ? "LONG (C4)" : "SHORT (C4)"
+        op4         := true
+    else if ls5 or ss5
+        is_long     := ls5
+        entry_price := close
+        tp_price    := ls5 ? close * (1 + tp5 / 100) : close * (1 - tp5 / 100)
+        sl_price    := ls5 ? close * (1 - sl5 / 100) : close * (1 + sl5 / 100)
+        eff_tp      := math.max(tp5 - fee_tp, 0) * lev
+        eff_sl      := (sl5 + fee_sl) * lev
+        trade_open  := true
+        entry_bar   := bar_index
+        trd_result  := ls5 ? "LONG (C5)" : "SHORT (C5)"
+        op5         := true
+    else if ls6 or ss6
+        is_long     := ls6
+        entry_price := close
+        tp_price    := ls6 ? close * (1 + tp6 / 100) : close * (1 - tp6 / 100)
+        sl_price    := ls6 ? close * (1 - sl6 / 100) : close * (1 + sl6 / 100)
+        eff_tp      := math.max(tp6 - fee_tp, 0) * lev
+        eff_sl      := (sl6 + fee_sl) * lev
+        trade_open  := true
+        entry_bar   := bar_index
+        trd_result  := ls6 ? "LONG (C6)" : "SHORT (C6)"
+        op6         := true
+    else if ls7 or ss7
+        is_long     := ls7
+        entry_price := close
+        tp_price    := ls7 ? close * (1 + tp7 / 100) : close * (1 - tp7 / 100)
+        sl_price    := ls7 ? close * (1 - sl7 / 100) : close * (1 + sl7 / 100)
+        eff_tp      := math.max(tp7 - fee_tp, 0) * lev
+        eff_sl      := (sl7 + fee_sl) * lev
+        trade_open  := true
+        entry_bar   := bar_index
+        trd_result  := ls7 ? "LONG (C7)" : "SHORT (C7)"
+        op7         := true
+    else if ls8 or ss8
+        is_long     := ls8
+        entry_price := close
+        tp_price    := ls8 ? close * (1 + tp8 / 100) : close * (1 - tp8 / 100)
+        sl_price    := ls8 ? close * (1 - sl8 / 100) : close * (1 + sl8 / 100)
+        eff_tp      := math.max(tp8 - fee_tp, 0) * lev
+        eff_sl      := (sl8 + fee_sl) * lev
+        trade_open  := true
+        entry_bar   := bar_index
+        trd_result  := ls8 ? "LONG (C8)" : "SHORT (C8)"
+        op8         := true
+    else if ls9 or ss9
+        is_long     := ls9
+        entry_price := close
+        tp_price    := ls9 ? close * (1 + tp9 / 100) : close * (1 - tp9 / 100)
+        sl_price    := ls9 ? close * (1 - sl9 / 100) : close * (1 + sl9 / 100)
+        eff_tp      := math.max(tp9 - fee_tp, 0) * lev
+        eff_sl      := (sl9 + fee_sl) * lev
+        trade_open  := true
+        entry_bar   := bar_index
+        trd_result  := ls9 ? "LONG (C9)" : "SHORT (C9)"
+        op9         := true
+    else if ls10 or ss10
+        is_long     := ls10
+        entry_price := close
+        tp_price    := ls10 ? close * (1 + tp10 / 100) : close * (1 - tp10 / 100)
+        sl_price    := ls10 ? close * (1 - sl10 / 100) : close * (1 + sl10 / 100)
+        eff_tp      := math.max(tp10 - fee_tp, 0) * lev
+        eff_sl      := (sl10 + fee_sl) * lev
+        trade_open  := true
+        entry_bar   := bar_index
+        trd_result  := ls10 ? "LONG (C10)" : "SHORT (C10)"
+        op10        := true
+    else if ls11 or ss11
+        is_long     := ls11
+        entry_price := close
+        tp_price    := ls11 ? close * (1 + tp11 / 100) : close * (1 - tp11 / 100)
+        sl_price    := ls11 ? close * (1 - sl11 / 100) : close * (1 + sl11 / 100)
+        eff_tp      := math.max(tp11 - fee_tp, 0) * lev
+        eff_sl      := (sl11 + fee_sl) * lev
+        trade_open  := true
+        entry_bar   := bar_index
+        trd_result  := ls11 ? "LONG (C11)" : "SHORT (C11)"
+        op11        := true
+    else if ls12 or ss12
+        is_long     := ls12
+        entry_price := close
+        tp_price    := ls12 ? close * (1 + tp12 / 100) : close * (1 - tp12 / 100)
+        sl_price    := ls12 ? close * (1 - sl12 / 100) : close * (1 + sl12 / 100)
+        eff_tp      := math.max(tp12 - fee_tp, 0) * lev
+        eff_sl      := (sl12 + fee_sl) * lev
+        trade_open  := true
+        entry_bar   := bar_index
+        trd_result  := ls12 ? "LONG (C12)" : "SHORT (C12)"
+        op12        := true
+    else if ls13 or ss13
+        is_long     := ls13
+        entry_price := close
+        tp_price    := ls13 ? close * (1 + tp13 / 100) : close * (1 - tp13 / 100)
+        sl_price    := ls13 ? close * (1 - sl13 / 100) : close * (1 + sl13 / 100)
+        eff_tp      := math.max(tp13 - fee_tp, 0) * lev
+        eff_sl      := (sl13 + fee_sl) * lev
+        trade_open  := true
+        entry_bar   := bar_index
+        trd_result  := ls13 ? "LONG (C13)" : "SHORT (C13)"
+        op13        := true
+    else if ls14 or ss14
+        is_long     := ls14
+        entry_price := close
+        tp_price    := ls14 ? close * (1 + tp14 / 100) : close * (1 - tp14 / 100)
+        sl_price    := ls14 ? close * (1 - sl14 / 100) : close * (1 + sl14 / 100)
+        eff_tp      := math.max(tp14 - fee_tp, 0) * lev
+        eff_sl      := (sl14 + fee_sl) * lev
+        trade_open  := true
+        entry_bar   := bar_index
+        trd_result  := ls14 ? "LONG (C14)" : "SHORT (C14)"
+        op14        := true
+    else if ls15 or ss15
+        is_long     := ls15
+        entry_price := close
+        tp_price    := ls15 ? close * (1 + tp15 / 100) : close * (1 - tp15 / 100)
+        sl_price    := ls15 ? close * (1 - sl15 / 100) : close * (1 + sl15 / 100)
+        eff_tp      := math.max(tp15 - fee_tp, 0) * lev
+        eff_sl      := (sl15 + fee_sl) * lev
+        trade_open  := true
+        entry_bar   := bar_index
+        trd_result  := ls15 ? "LONG (C15)" : "SHORT (C15)"
+        op15        := true
+
+any_signal = op1 or op2 or op3 or op4 or op5 or op6 or op7 or op8 or op9 or op10 or op11 or op12 or op13 or op14 or op15
+win_rate   = tot_cl > 0 ? (tot_tp / tot_cl) * 100 : 0.0
+
+// ═══════════════════════════════════════════════════════════════════════════
+// VISUALES — líneas Supertrend
+// ═══════════════════════════════════════════════════════════════════════════
+plot(show_st and uc1  ? st1  : na, "ST C1",  color=d1  < 0 ? color.orange                  : color.new(color.orange,  60), linewidth=1, style=plot.style_linebr)
+plot(show_st and uc2  ? st2  : na, "ST C2",  color=d2  < 0 ? color.purple                  : color.new(color.purple,  60), linewidth=1, style=plot.style_linebr)
+plot(show_st and uc3  ? st3  : na, "ST C3",  color=d3  < 0 ? color.teal                    : color.new(color.teal,    60), linewidth=1, style=plot.style_linebr)
+plot(show_st and uc4  ? st4  : na, "ST C4",  color=d4  < 0 ? color.blue                    : color.new(color.blue,    60), linewidth=1, style=plot.style_linebr)
+plot(show_st and uc5  ? st5  : na, "ST C5",  color=d5  < 0 ? color.fuchsia                 : color.new(color.fuchsia, 60), linewidth=1, style=plot.style_linebr)
+plot(show_st and uc6  ? st6  : na, "ST C6",  color=d6  < 0 ? color.lime                    : color.new(color.lime,    60), linewidth=1, style=plot.style_linebr)
+plot(show_st and uc7  ? st7  : na, "ST C7",  color=d7  < 0 ? color.yellow                  : color.new(color.yellow,  60), linewidth=1, style=plot.style_linebr)
+plot(show_st and uc8  ? st8  : na, "ST C8",  color=d8  < 0 ? color.aqua                    : color.new(color.aqua,    60), linewidth=1, style=plot.style_linebr)
+plot(show_st and uc9  ? st9  : na, "ST C9",  color=d9  < 0 ? color.maroon                  : color.new(color.maroon,  60), linewidth=1, style=plot.style_linebr)
+plot(show_st and uc10 ? st10 : na, "ST C10", color=d10 < 0 ? color.silver                  : color.new(color.silver,  60), linewidth=1, style=plot.style_linebr)
+plot(show_st and uc11 ? st11 : na, "ST C11", color=d11 < 0 ? color.navy                    : color.new(color.navy,    60), linewidth=1, style=plot.style_linebr)
+plot(show_st and uc12 ? st12 : na, "ST C12", color=d12 < 0 ? color.olive                   : color.new(color.olive,   60), linewidth=1, style=plot.style_linebr)
+plot(show_st and uc13 ? st13 : na, "ST C13", color=d13 < 0 ? color.gray                    : color.new(color.gray,    60), linewidth=1, style=plot.style_linebr)
+plot(show_st and uc14 ? st14 : na, "ST C14", color=d14 < 0 ? color.red                     : color.new(color.red,     60), linewidth=1, style=plot.style_linebr)
+plot(show_st and uc15 ? st15 : na, "ST C15", color=d15 < 0 ? color.new(color.white, 20)    : color.new(color.white,   70), linewidth=1, style=plot.style_linebr)
+
+plot(show_trd and not na(entry_price) ? entry_price : na, "Entrada",     color=color.yellow, linewidth=2, style=plot.style_linebr)
+plot(show_trd and not na(tp_price)    ? tp_price    : na, "Take Profit", color=color.lime,   linewidth=2, style=plot.style_linebr)
+plot(show_trd and not na(sl_price)    ? sl_price    : na, "Stop Loss",   color=color.red,    linewidth=2, style=plot.style_linebr)
+
+// Marcas de señal — label.new() acepta series string; plotshape solo acepta const string
+if show_sig and any_signal
+    _lbl = op1 ? "C1" : op2 ? "C2" : op3 ? "C3" : op4 ? "C4" : op5 ? "C5" : op6 ? "C6" : op7 ? "C7" : op8 ? "C8" : op9 ? "C9" : op10 ? "C10" : op11 ? "C11" : op12 ? "C12" : op13 ? "C13" : op14 ? "C14" : "C15"
+    if is_long
+        label.new(bar_index, low,  _lbl, style=label.style_label_up,   color=color.new(color.green, 0), textcolor=color.white, size=size.small)
+    else
+        label.new(bar_index, high, _lbl, style=label.style_label_down, color=color.new(color.red,   0), textcolor=color.white, size=size.small)
+
+plotshape(tp_hit, "TP", style=shape.labelup,   location=location.belowbar, color=color.lime, textcolor=color.black, size=size.tiny, text="TP")
+plotshape(sl_hit, "SL", style=shape.labeldown, location=location.abovebar, color=color.red,  textcolor=color.white, size=size.tiny, text="SL")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TABLAS
+// ═══════════════════════════════════════════════════════════════════════════
+var table info_panel  = table.new(position.bottom_right, 2, 8,  bgcolor=color.new(color.black, 60))
+var table stats_panel = table.new(position.top_center,   2, 10, bgcolor=color.new(color.black, 60))
+
+if barstate.islast
+    net_col  = net >= 0 ? color.green : color.red
+    dd_col   = max_dd > 0 ? color.orange : color.gray
+    side_txt = is_long ? "LONG 🟢" : "SHORT 🔴"
+    side_col = is_long ? color.green : color.red
+
+    table.cell(info_panel, 0, 0, "Estado trade",    text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 0, trade_open ? side_txt : "Sin trade", text_color=color.white, bgcolor=trade_open ? side_col : color.gray, text_size=size.small)
+
+    table.cell(info_panel, 0, 1, "Último resultado", text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 1, trd_result,          text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 2, "Entrada",           text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 2, na(entry_price) ? "-" : str.tostring(entry_price, "#.##"), text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 3, "TP / SL",           text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 3, (na(tp_price) or na(sl_price)) ? "-" : str.tostring(tp_price, "#.##") + " / " + str.tostring(sl_price, "#.##"), text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 4, "RSI actual",        text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 4, not na(rsi) ? str.tostring(rsi, "#.##") : "-", text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 5, "Body ratio",        text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 5, str.tostring(body_r, "#.##"), text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 6, "Combos activos",    text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 6, str.tostring((uc1?1:0)+(uc2?1:0)+(uc3?1:0)+(uc4?1:0)+(uc5?1:0)+(uc6?1:0)+(uc7?1:0)+(uc8?1:0)+(uc9?1:0)+(uc10?1:0)+(uc11?1:0)+(uc12?1:0)+(uc13?1:0)+(uc14?1:0)+(uc15?1:0)), text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 7, "Dirección",         text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 7, trade_dir,            text_color=color.white, text_size=size.small)
+
+    table.cell(stats_panel, 0, 0, "TP cerrados",       text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 0, str.tostring(tot_tp), text_color=color.white, bgcolor=color.new(color.green, 60), text_size=size.small)
+
+    table.cell(stats_panel, 0, 1, "SL cerrados",       text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 1, str.tostring(tot_sl), text_color=color.white, bgcolor=color.new(color.red, 60), text_size=size.small)
+
+    table.cell(stats_panel, 0, 2, "Trades cerrados",   text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 2, str.tostring(tot_cl), text_color=color.white, text_size=size.small)
+
+    table.cell(stats_panel, 0, 3, "Ganancia acum. x" + str.tostring(lev, "#"), text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 3, str.tostring(prof, "#.##") + "%", text_color=color.white, bgcolor=color.new(color.green, 70), text_size=size.small)
+
+    table.cell(stats_panel, 0, 4, "Pérdida acum. x" + str.tostring(lev, "#"), text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 4, str.tostring(loss, "#.##") + "%", text_color=color.white, bgcolor=color.new(color.red, 70), text_size=size.small)
+
+    table.cell(stats_panel, 0, 5, "Neto simple x" + str.tostring(lev, "#"), text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 5, str.tostring(net, "#.##") + "%", text_color=color.white, bgcolor=net_col, text_size=size.small)
+
+    table.cell(stats_panel, 0, 6, "Win Rate",          text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 6, str.tostring(win_rate, "#.##") + "%", text_color=color.white, text_size=size.small)
+
+    table.cell(stats_panel, 0, 7, "Máx. caída",        text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 7, str.tostring(max_dd, "#.##") + "%", text_color=color.white, bgcolor=dd_col, text_size=size.small)
+
+    table.cell(stats_panel, 0, 8, "Capital simple",    text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 8, "$" + str.tostring(smp_cap, "#.##"), text_color=color.white, bgcolor=color.new(color.gray, 70), text_size=size.small)
+
+    table.cell(stats_panel, 0, 9, "Capital compuesto", text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 9, "$" + str.tostring(cmp_cap, "#.##"), text_color=color.white, bgcolor=color.new(color.blue, 75), text_size=size.small)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ALERTAS
+// ═══════════════════════════════════════════════════════════════════════════
+alertcondition(any_signal, "Señal Supertrend (cualquier combo)", "Supertrend: señal disparada")
+alertcondition(tp_hit,     "TP alcanzado",                       "Supertrend: Take Profit alcanzado")
+alertcondition(sl_hit,     "SL alcanzado",                       "Supertrend: Stop Loss alcanzado")
+
+if any_signal
+    _tp  = op1 ? tp1 : op2 ? tp2 : op3 ? tp3 : op4 ? tp4 : op5 ? tp5 : op6 ? tp6 : op7 ? tp7 : op8 ? tp8 : op9 ? tp9 : op10 ? tp10 : op11 ? tp11 : op12 ? tp12 : op13 ? tp13 : op14 ? tp14 : tp15
+    _sl  = op1 ? sl1 : op2 ? sl2 : op3 ? sl3 : op4 ? sl4 : op5 ? sl5 : op6 ? sl6 : op7 ? sl7 : op8 ? sl8 : op9 ? sl9 : op10 ? sl10 : op11 ? sl11 : op12 ? sl12 : op13 ? sl13 : op14 ? sl14 : sl15
+    _dir = is_long ? "long" : "short"
+    alert('{"secret":"TestAndres","account":"' + wh_acct + '","tipo":"ST","dir":"' + _dir + '","tp":' + str.tostring(_tp) + ',"sl":' + str.tostring(_sl) + '}', alert.freq_once_per_bar_close)
