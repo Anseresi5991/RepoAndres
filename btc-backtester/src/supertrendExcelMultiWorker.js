@@ -307,10 +307,9 @@ self.onmessage = function (e) {
     }, 0)
 
     const REPORT_EVERY = Math.max(50, Math.floor(total / 100))
-    const MAX_RESULTS = 500
     let allResults = []
-    let minScore = -Infinity
     let done = 0
+    let lastReportedLength = 0
 
     for (const size of validSizes) {
       const maxCombinations = approxCombinations(M, size)
@@ -325,25 +324,22 @@ self.onmessage = function (e) {
 
         if (bt.totalClosed >= 3 && net > 0 && dd <= 50) {
           const score = net / Math.max(dd, 0.1)
-          if (allResults.length < MAX_RESULTS || score > minScore) {
-            allResults.push({
-              size,
-              combos: indices.map(idx => ({ idx, ...combos[idx] })),
-              ...bt,
-              _score: score,
-            })
-            if (allResults.length > MAX_RESULTS * 2) {
-              allResults.sort((a, b) => b._score - a._score)
-              allResults = allResults.slice(0, MAX_RESULTS)
-              minScore = allResults[allResults.length - 1]._score
-            }
-          }
+          allResults.push({
+            size,
+            combos: indices.map(idx => ({ idx, ...combos[idx] })),
+            ...bt,
+            _score: score,
+          })
         }
 
         done++
         if (done % REPORT_EVERY === 0) {
-          const sorted = allResults.slice().sort((a, b) => b._score - a._score).slice(0, 50)
-          self.postMessage({ type: 'progress', done, total, topResults: sorted })
+          if (allResults.length !== lastReportedLength) {
+            lastReportedLength = allResults.length
+            self.postMessage({ type: 'progress', done, total, topResults: allResults.slice() })
+          } else {
+            self.postMessage({ type: 'progress', done, total })
+          }
         }
       }
     }

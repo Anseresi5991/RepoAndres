@@ -127,6 +127,8 @@ export function runConfluenceBacktest(candles, params) {
     leverage            = 1,
     initialCapital      = 1000,
     tradeDirection      = 'both',
+    emaTrend            = 200,
+    skipSundays         = true,
   } = params
 
   const N = candles.length
@@ -145,12 +147,13 @@ export function runConfluenceBacktest(candles, params) {
     times[i]   = candles[i].OpenTime
   }
 
-  const emaFastArr = computeEMA(closes, emaFast)
-  const emaSlowArr = computeEMA(closes, emaSlow)
-  const rsiArr     = computeRSI(closes, rsiPeriod)
+  const emaFastArr  = computeEMA(closes, emaFast)
+  const emaSlowArr  = computeEMA(closes, emaSlow)
+  const emaTrendArr = computeEMA(closes, emaTrend)
+  const rsiArr      = computeRSI(closes, rsiPeriod)
   const { macdLine, signalLine } = computeMACD(closes, macdFast, macdSlow, macdSignalPeriod)
   const { upper: bbUpper, lower: bbLower } = computeBB(closes, bbPeriod, bbStdDev)
-  const volMAArr   = computeSMA(volumes, volMAPeriod)
+  const volMAArr    = computeSMA(volumes, volMAPeriod)
 
   const effTp = Math.max(tpPct - feeTpPct, 0) * leverage
   const effSl = (slPct + feeSlPct) * leverage
@@ -177,7 +180,7 @@ export function runConfluenceBacktest(candles, params) {
     const time  = times[i]
 
     if (
-      isNaN(emaFastArr[i]) || isNaN(emaSlowArr[i]) ||
+      isNaN(emaFastArr[i]) || isNaN(emaSlowArr[i]) || isNaN(emaTrendArr[i]) ||
       isNaN(rsiArr[i]) ||
       isNaN(macdLine[i]) || isNaN(signalLine[i]) ||
       isNaN(bbUpper[i])  || isNaN(bbLower[i]) ||
@@ -218,7 +221,11 @@ export function runConfluenceBacktest(candles, params) {
 
     // ── Buscar nueva señal si no hay trade abierto ──
     if (!inTrade) {
-      const highVol = vol > volMAArr[i] * volMultiplier
+      if (skipSundays && new Date(time).getUTCDay() === 0) continue
+
+      const highVol    = vol > volMAArr[i] * volMultiplier
+      const trendLong  = close > emaTrendArr[i]
+      const trendShort = close < emaTrendArr[i]
 
       const longScore = [
         emaFastArr[i] > emaSlowArr[i],   // EMA: tendencia alcista
@@ -236,8 +243,8 @@ export function runConfluenceBacktest(candles, params) {
         close         >= bbUpper[i],       // BB: precio en banda superior
       ].filter(Boolean).length
 
-      const longOk  = canLong  && longScore  >= confluencesRequired
-      const shortOk = canShort && shortScore >= confluencesRequired
+      const longOk  = canLong  && longScore  >= confluencesRequired && trendLong
+      const shortOk = canShort && shortScore >= confluencesRequired && trendShort
 
       let signalLong = false, signalShort = false
       if      (longOk && !shortOk)                  signalLong  = true

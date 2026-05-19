@@ -1,0 +1,56 @@
+[
+  {
+    "id": "OP_1778718374806",
+    "openedAt": "2026-05-14T00:26:05.632Z",
+    "closedAt": "2026-05-14T01:04:59.999Z",
+    "signal": "LONG",
+    "tpPct": 0.45,
+    "slPct": 0.35,
+    "entryPrice": 79445.1,
+    "tpPrice": 79672,
+    "slPrice": 79167,
+    "status": "CLOSED_TP",
+    "reasoning": "Price (79490.10) is trading above EMA20(5m)=79401.73 with RSI7(5m)=67.8 showing overbought conditions yet sustained momentum, and EMA50(15m)=79671.36 serves as resistance suggesting a pullback range-trade setup. Using ATR-based method: SL% = (158.23/79490.10) × 0.75 × 100 = 0.35%, TP% = 0.35% × 1.3 RR = 0.45% (justified by tight recent consolidation in last 6h 5m candles, lower confidence due to overbought RSI7). Support cluster at 79215-79243 and resistance at 79577 define the tradeable range; volume compression (0.37x) suggests breakout potential but entry near resistance requires tight stops."
+  },
+  {
+    "id": "OP_1778723113940",
+    "openedAt": "2026-05-14T01:45:05.479Z",
+    "closedAt": "2026-05-14T03:24:59.999Z",
+    "signal": "SHORT",
+    "tpPct": 0.5,
+    "slPct": 0.6,
+    "entryPrice": 79442.3,
+    "tpPrice": 79045.09,
+    "slPrice": 79918.9,
+    "status": "CLOSED_TP",
+    "reasoning": "Price 79482.59 sits below EMA50 (79643.25) and EMA200 (80414.41), confirming downtrend structure. RSI14(15m)=49 is neutral-to-bearish, and recent candles show rejection from 79700 resistance with lower highs. ATR-based SL: (148.2/79482.59)×1.0×100=0.186% base, scaled to 0.60% for risk discipline; TP at 0.50% (RR=0.83) targets support near 79084 from 15m structure."
+  },
+  {
+    "id": "OP_1778731343326",
+    "openedAt": "2026-05-14T04:02:08.666Z",
+    "closedAt": "2026-05-14T04:19:59.999Z",
+    "signal": "SHORT",
+    "tpPct": 0.5,
+    "slPct": 0.4,
+    "entryPrice": 78947.9,
+    "tpPrice": 78553.16,
+    "slPrice": 79263.6,
+    "status": "CLOSED_SL",
+    "beActivated": false,
+    "reasoning": "Price has broken down from the BB lower band (79020) and is now trading at 78962, with all EMAs (9/21/50/100/200 on 15m) stacked bearishly above current price acting as resistance. ADX at 29.8 confirms trend strength with -DI (33.2) strongly dominating +DI (10.6), MACD histogram deeply negative at -56.07, and RSI14 at 31.3 (not yet oversold enough to fade). Breakdown SHORT: SL = above recent breakdown candle high (79033) + ATR×0.3 (58.3) ≈ 79091, which is ~0.16% above but using 0.4% to respect full wick structure and ATR buffer; TP targets ~79420 area (prior swing low cluster / round level) but directionally aiming for 78566 (~0.5% below current), giving an acceptable R:R on continuation of the established downtrend."
+  },
+  {
+    "id": "OP_1778732492638",
+    "openedAt": "2026-05-14T04:21:19.662Z",
+    "closedAt": "2026-05-14T05:24:59.999Z",
+    "signal": "SHORT",
+    "tpPct": 0.42,
+    "slPct": 0.35,
+    "entryPrice": 79266.6,
+    "tpPrice": 78933.68,
+    "slPrice": 79544,
+    "status": "CLOSED_SL",
+    "beActivated": false,
+    "reasoning": "Price is breaking down below key supports: 15m shows a cascade of high-volume bearish candles (1003, 979, 1162 vol) pushing through 79300 and 79150 support zones, with the 200 EMA at 80313 and 100 EMA at 79829 acting as overhead resistance. ADX at 29.3 confirms trend strength with -DI (28.5) dominating +DI (14.6), MACD histogram deepening negative at -26.26, and price trading below all major EMAs (9=79263, 21=79343, 50=79504). SL placed above the breakdown candle high of 79324 + ATR×0.3 (63.5) ≈ 79388, giving ~0.35% stop from current 79282; TP targets the 78852 recent swing low area for ~0.42% gain."
+  }
+]

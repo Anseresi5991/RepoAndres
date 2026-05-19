@@ -695,5 +695,4 @@ alertcondition(sl_hit,     "SL alcanzado",                       "Supertrend: St
 if any_signal
     _tp  = op1 ? tp1 : op2 ? tp2 : op3 ? tp3 : op4 ? tp4 : op5 ? tp5 : op6 ? tp6 : op7 ? tp7 : op8 ? tp8 : op9 ? tp9 : op10 ? tp10 : op11 ? tp11 : op12 ? tp12 : op13 ? tp13 : op14 ? tp14 : tp15
     _sl  = op1 ? sl1 : op2 ? sl2 : op3 ? sl3 : op4 ? sl4 : op5 ? sl5 : op6 ? sl6 : op7 ? sl7 : op8 ? sl8 : op9 ? sl9 : op10 ? sl10 : op11 ? sl11 : op12 ? sl12 : op13 ? sl13 : op14 ? sl14 : sl15
-    _dir = is_long ? "long" : "short"
-    alert('{"secret":"TestAndres","account":"' + wh_acct + '","tipo":"ST","dir":"' + _dir + '","tp":' + str.tostring(_tp) + ',"sl":' + str.tostring(_sl) + '}', alert.freq_once_per_bar_close)
+    alert('{"secret":"TestAndres","account":"' + wh_acct + '","tipo":"' + (is_long ? "S" : "R") + '","tp":' + str.tostring(_tp) + ',"sl":' + str.tostring(_sl) + '}', alert.freq_once_per_bar_close)

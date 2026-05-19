@@ -1,14 +1,16 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { createChart, CandlestickSeries, createSeriesMarkers, LineStyle } from 'lightweight-charts'
 import { runBacktest, runMultiBacktest } from './backtester.js'
 import { runSARBacktest } from './backtesterSAR.js'
 import { runSupertrendBacktest, runMultiSupertrendBacktest } from './backtesterSupertrend.js'
+import { runSupertrendDCABacktest, runMultiSupertrendDCABacktest } from './backtesterSupertrendDCA.js'
 import { runConfluenceBacktest } from './backtesterConfluence.js'
 import { runEmaPullbackBacktest } from './backtesterEmaPullback.js'
 import { runPinBarBacktest } from './backtesterPinBar.js'
 import { runSoporteBacktest, runMultiSoporteBacktest } from './backtesterSoporte.js'
 import { runEmaTouchBacktest, runMultiEmaTouchBacktest } from './backtesterEma.js'
 import { runBacktest as runRangeHighBacktest, runMultiBacktest as runMultiRangeHighBacktest } from './backtesterRangeHigh.js'
+import { runScalping5mBacktest } from './backtesterScalping5m.js'
 import * as XLSX from 'xlsx'
 import './App.css'
 
@@ -20,6 +22,7 @@ const isSarOptimMode         = isSarMode && new URLSearchParams(window.location.
 const isSupertrendMode       = new URLSearchParams(window.location.search).get('strategy') === 'supertrend'
 const isSupertrendOptimMode      = isSupertrendMode && new URLSearchParams(window.location.search).get('mode') === 'optim'
 const isSupertrendExcelOptimMode = isSupertrendMode && new URLSearchParams(window.location.search).get('mode') === 'exceloptim'
+const isSupertrendDCAMode    = new URLSearchParams(window.location.search).get('strategy') === 'supertrend-dca'
 const isConfluenceMode       = new URLSearchParams(window.location.search).get('strategy') === 'confluence'
 const isConfluenceOptimMode  = isConfluenceMode && new URLSearchParams(window.location.search).get('mode') === 'optim'
 const isEmaPullbackMode      = new URLSearchParams(window.location.search).get('strategy') === 'emapullback'
@@ -34,6 +37,10 @@ const isEmaMode                  = new URLSearchParams(window.location.search).g
 const isEmaOptimMode             = isEmaMode && new URLSearchParams(window.location.search).get('mode') === 'optim'
 const isEmaExcelOptimMode        = isEmaMode && new URLSearchParams(window.location.search).get('mode') === 'exceloptim'
 const isRangeHighMode            = new URLSearchParams(window.location.search).get('strategy') === 'rangehigh'
+const isScalping5mMode           = new URLSearchParams(window.location.search).get('strategy') === 'scalping5m'
+const isScalping5mOptimMode      = isScalping5mMode && new URLSearchParams(window.location.search).get('mode') === 'optim'
+const isLiveMode                 = new URLSearchParams(window.location.search).get('strategy') === 'live'
+const isStatsMode                = new URLSearchParams(window.location.search).get('strategy') === 'dcastats'
 
 // ── Helpers para paralelizar el Análisis Profundo en múltiples workers ──
 function optRangeValues(min, max, step) {
@@ -206,21 +213,21 @@ const DEFAULT_SUPERTREND_OPTIM = {
 }
 
 const DEFAULT_SUPERTREND_MULTI_COMBOS = [
-  { atrPeriod:  8, atrMultiplier:  6.0, atrVolFilter: 1.5, rsiThreshold:  0, bodyRatioMin: 1.0, tpPct: 2.45, slPct: 2.6 },
-  { atrPeriod: 11, atrMultiplier:  5.0, atrVolFilter: 2.0, rsiThreshold:  0, bodyRatioMin: 1.0, tpPct: 1.25, slPct: 2.9 },
-  { atrPeriod: 14, atrMultiplier:  6.5, atrVolFilter: 1.0, rsiThreshold: 70, bodyRatioMin: 0.9, tpPct: 1.05, slPct: 2.9 },
-  { atrPeriod:  8, atrMultiplier:  3.5, atrVolFilter: 1.0, rsiThreshold: 60, bodyRatioMin: 0.8, tpPct: 0.45, slPct: 2.9 },
-  { atrPeriod: 17, atrMultiplier:  2.5, atrVolFilter: 0.0, rsiThreshold: 55, bodyRatioMin: 1.0, tpPct: 2.25, slPct: 2.1 },
-  { atrPeriod: 14, atrMultiplier:  3.5, atrVolFilter: 0.0, rsiThreshold: 50, bodyRatioMin: 0.8, tpPct: 2.95, slPct: 2.7 },
-  { atrPeriod:  8, atrMultiplier:  6.0, atrVolFilter: 1.0, rsiThreshold: 65, bodyRatioMin: 0.1, tpPct: 0.35, slPct: 2.4 },
-  { atrPeriod: 11, atrMultiplier:  1.0, atrVolFilter: 2.0, rsiThreshold: 25, bodyRatioMin: 0.3, tpPct: 1.05, slPct: 2.4 },
-  { atrPeriod:  8, atrMultiplier:  9.5, atrVolFilter: 1.0, rsiThreshold:  0, bodyRatioMin: 0.8, tpPct: 0.75, slPct: 2.8 },
-  { atrPeriod:  5, atrMultiplier:  6.5, atrVolFilter: 0.0, rsiThreshold:  0, bodyRatioMin: 1.0, tpPct: 2.65, slPct: 1.9 },
-  { atrPeriod: 14, atrMultiplier:  3.5, atrVolFilter: 0.0, rsiThreshold: 50, bodyRatioMin: 0.8, tpPct: 3.35, slPct: 2.9 },
-  { atrPeriod: 11, atrMultiplier:  1.5, atrVolFilter: 2.0, rsiThreshold: 30, bodyRatioMin: 0.0, tpPct: 1.65, slPct: 2.2 },
-  { atrPeriod: 14, atrMultiplier:  6.5, atrVolFilter: 1.0, rsiThreshold:  0, bodyRatioMin: 0.9, tpPct: 0.75, slPct: 2.9 },
-  { atrPeriod: 11, atrMultiplier:  7.5, atrVolFilter: 1.0, rsiThreshold: 70, bodyRatioMin: 0.8, tpPct: 0.75, slPct: 2.4 },
-  { atrPeriod:  5, atrMultiplier:  7.0, atrVolFilter: 1.0, rsiThreshold: 65, bodyRatioMin: 0.8, tpPct: 1.35, slPct: 2.8 },
+  { atrPeriod:  5, atrMultiplier:  6.5, atrVolFilter: 2.0, rsiThreshold:  0, bodyRatioMin: 1.0, tpPct: 2.35, slPct: 2.0 },
+  { atrPeriod:  5, atrMultiplier:  6.5, atrVolFilter: 0.0, rsiThreshold:  0, bodyRatioMin: 1.0, tpPct: 2.55, slPct: 2.7 },
+  { atrPeriod:  8, atrMultiplier:  6.0, atrVolFilter: 1.0, rsiThreshold: 65, bodyRatioMin: 0.0, tpPct: 0.35, slPct: 2.3 },
+  { atrPeriod:  8, atrMultiplier:  7.0, atrVolFilter: 1.5, rsiThreshold: 65, bodyRatioMin: 0.9, tpPct: 1.35, slPct: 2.1 },
+  { atrPeriod: 14, atrMultiplier:  3.5, atrVolFilter: 0.0, rsiThreshold: 50, bodyRatioMin: 0.8, tpPct: 3.35, slPct: 2.4 },
+  { atrPeriod:  8, atrMultiplier:  9.0, atrVolFilter: 1.0, rsiThreshold: 70, bodyRatioMin: 0.8, tpPct: 0.65, slPct: 3.0 },
+  { atrPeriod:  8, atrMultiplier:  6.0, atrVolFilter: 2.0, rsiThreshold:  0, bodyRatioMin: 1.0, tpPct: 2.25, slPct: 2.2 },
+  { atrPeriod: 11, atrMultiplier:  1.0, atrVolFilter: 2.0, rsiThreshold: 25, bodyRatioMin: 0.3, tpPct: 1.05, slPct: 3.0 },
+  { atrPeriod: 17, atrMultiplier:  2.5, atrVolFilter: 2.0, rsiThreshold: 40, bodyRatioMin: 0.7, tpPct: 1.35, slPct: 3.0 },
+  { atrPeriod: 11, atrMultiplier:  6.5, atrVolFilter: 1.0, rsiThreshold: 65, bodyRatioMin: 0.7, tpPct: 1.45, slPct: 3.0 },
+  { atrPeriod: 11, atrMultiplier:  1.5, atrVolFilter: 0.0, rsiThreshold: 30, bodyRatioMin: 0.2, tpPct: 1.55, slPct: 1.4 },
+  { atrPeriod:  8, atrMultiplier:  6.0, atrVolFilter: 0.0, rsiThreshold:  0, bodyRatioMin: 1.0, tpPct: 2.45, slPct: 2.5 },
+  { atrPeriod: 17, atrMultiplier:  2.5, atrVolFilter: 0.0, rsiThreshold: 55, bodyRatioMin: 1.0, tpPct: 2.35, slPct: 2.1 },
+  { atrPeriod: 11, atrMultiplier:  7.5, atrVolFilter: 1.0, rsiThreshold: 70, bodyRatioMin: 0.8, tpPct: 0.85, slPct: 2.9 },
+  { atrPeriod:  5, atrMultiplier:  7.0, atrVolFilter: 1.0, rsiThreshold:  0, bodyRatioMin: 0.8, tpPct: 0.85, slPct: 3.0 },
 ]
 
 const DEFAULT_CONFLUENCE_PARAMS = {
@@ -244,6 +251,8 @@ const DEFAULT_CONFLUENCE_PARAMS = {
   leverage:            1,
   initialCapital:      1000,
   tradeDirection:      'both',
+  emaTrend:            200,
+  skipSundays:         true,
   dateFrom:            '2022-01-01',
   dateTo:              new Date().toISOString().split('T')[0],
 }
@@ -1019,12 +1028,16 @@ function MultiOptimView() {
 }
 
 function SarOptimView() {
-  const [status, setStatus] = useState('waiting')
+  const [status, setStatus]     = useState('waiting')
   const [progress, setProgress] = useState(null)
-  const [ranking, setRanking] = useState([])
+  const [ranking, setRanking]   = useState([])
   const [errorMsg, setErrorMsg] = useState('')
+  const [sortConfig, setSortConfig] = useState({ key: '_score', dir: 'desc' })
+  const [currentPage, setCurrentPage] = useState(0)
   const startTimeRef = useRef(null)
-  const bcRef = useRef(null)
+  const bcRef        = useRef(null)
+  const workersRef   = useRef([])
+  const SAR_PAGE_SIZE = 50
 
   useEffect(() => {
     const bc = new BroadcastChannel('btc-sar-optim')
@@ -1038,43 +1051,97 @@ function SarOptimView() {
       const msg = e.data
       if (msg.type === 'init') {
         clearTimeout(retryTimer)
+        workersRef.current.forEach(w => w.terminate())
+        workersRef.current = []
+
         const { candles, optimRanges, params } = msg
         setStatus('running')
         startTimeRef.current = Date.now()
 
-        const worker = new Worker(new URL('./sarOptimWorker.js', import.meta.url), { type: 'module' })
-        worker.onmessage = (ev) => {
-          const m = ev.data
-          if (m.type === 'progress') {
-            const elapsed = Date.now() - startTimeRef.current
-            let eta = null
-            if (m.done >= 1 && elapsed >= 300) {
-              eta = Math.round((m.total - m.done) / (m.done / elapsed))
+        const nWorkers    = Math.min(navigator.hardwareConcurrency || 4, 8)
+        const wDone       = new Array(nWorkers).fill(0)
+        const wTotal      = new Array(nWorkers).fill(0)
+        const wPartials   = new Array(nWorkers).fill(null)
+        const wResults    = new Array(nWorkers).fill(null)
+        let   finishedCount = 0
+
+        for (let wi = 0; wi < nWorkers; wi++) {
+          const worker = new Worker(new URL('./sarOptimWorker.js', import.meta.url), { type: 'module' })
+          workersRef.current.push(worker)
+
+          worker.onmessage = (ev) => {
+            const m = ev.data
+            if (m.type === 'progress') {
+              wDone[wi]  = m.done
+              wTotal[wi] = m.total
+              if (m.topResults?.length > 0) wPartials[wi] = m.topResults
+              const totalDone = wDone.reduce((a, b) => a + b, 0)
+              const totalAll  = wTotal.reduce((a, b) => a + b, 0)
+              const elapsed   = Date.now() - startTimeRef.current
+              let eta = null
+              if (totalDone >= 1 && elapsed >= 300 && totalAll > 0)
+                eta = Math.round((totalAll - totalDone) / (totalDone / elapsed))
+              setProgress({ done: totalDone, total: totalAll, eta })
+              const combined = wPartials.flatMap(r => r ?? [])
+              if (combined.length > 0) {
+                combined.sort((a, b) => b._score - a._score)
+                setRanking(combined)
+              }
+            } else if (m.type === 'done') {
+              wResults[wi] = m.results ?? []
+              worker.terminate()
+              finishedCount++
+              if (finishedCount === nWorkers) {
+                const combined = wResults.flat().sort((a, b) => b._score - a._score)
+                setRanking(combined)
+                setStatus('done')
+                setProgress(p => p ? { ...p, done: p.total } : null)
+              }
+            } else if (m.type === 'error') {
+              setErrorMsg(m.message)
+              setStatus('error')
+              workersRef.current.forEach(w => w.terminate())
+              workersRef.current = []
             }
-            setProgress({ done: m.done, total: m.total, eta })
-            if (m.topResults?.length > 0) setRanking(m.topResults)
-          } else if (m.type === 'done') {
-            setStatus('done')
-            setProgress(p => p ? { ...p, done: p.total } : null)
-            if (m.results?.length > 0) setRanking(m.results)
-            worker.terminate()
-          } else if (m.type === 'error') {
-            setErrorMsg(m.message)
-            setStatus('error')
-            worker.terminate()
           }
+          worker.onerror = (ev) => {
+            setErrorMsg(ev.message)
+            setStatus('error')
+            workersRef.current.forEach(w => w.terminate())
+            workersRef.current = []
+          }
+          worker.postMessage({ candles, optimRanges, params: { ...params, workerIndex: wi, numWorkers: nWorkers } })
         }
-        worker.onerror = (ev) => { setErrorMsg(ev.message); setStatus('error'); worker.terminate() }
-        worker.postMessage({ candles, optimRanges, params })
       }
     }
 
-    return () => { clearTimeout(retryTimer); bc.close() }
+    return () => {
+      clearTimeout(retryTimer)
+      bc.close()
+      workersRef.current.forEach(w => w.terminate())
+      workersRef.current = []
+    }
   }, [])
 
   function applyParams(row) {
     bcRef.current?.postMessage({ type: 'apply', row })
   }
+
+  function handleSort(key) {
+    setSortConfig(prev => ({ key, dir: prev.key === key && prev.dir === 'desc' ? 'asc' : 'desc' }))
+    setCurrentPage(0)
+  }
+
+  const sortedRanking = useMemo(() => {
+    const arr = [...ranking]
+    const { key, dir } = sortConfig
+    arr.sort((a, b) => {
+      const av = parseFloat(a[key] ?? a._score)
+      const bv = parseFloat(b[key] ?? b._score)
+      return dir === 'desc' ? bv - av : av - bv
+    })
+    return arr
+  }, [ranking, sortConfig])
 
   const pct = progress ? Math.round(progress.done / progress.total * 100) : 0
 
@@ -1119,47 +1186,87 @@ function SarOptimView() {
           </div>
         )}
 
-        {ranking.length > 0 && (
-          <>
-            <div className="optim-rank-meta">
-              Ranking por Score = Neto% ÷ Drawdown% · filtro: neto &gt; 0% · mín. 5 trades · top 200
-              {status === 'running' && ' · actualizando en vivo...'}
+        {sortedRanking.length > 0 && (() => {
+          const pageCount = Math.ceil(sortedRanking.length / SAR_PAGE_SIZE)
+          const safePage  = Math.min(currentPage, Math.max(0, pageCount - 1))
+          const pagedRows = sortedRanking.slice(safePage * SAR_PAGE_SIZE, (safePage + 1) * SAR_PAGE_SIZE)
+          const SortTh = ({ col, label }) => {
+            const active = sortConfig.key === col
+            const icon   = active ? (sortConfig.dir === 'desc' ? ' ▼' : ' ▲') : ' ⇅'
+            return (
+              <th onClick={() => handleSort(col)} style={{cursor:'pointer', userSelect:'none', color: active ? 'var(--accent)' : undefined}}>
+                {label}{icon}
+              </th>
+            )
+          }
+          const PagBar = () => (
+            <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,padding:'6px 0',fontSize:12,flexWrap:'wrap'}}>
+              <button className="apply-btn" disabled={safePage === 0} onClick={() => setCurrentPage(0)}>«</button>
+              <button className="apply-btn" disabled={safePage === 0} onClick={() => setCurrentPage(p => Math.max(0, p - 1))}>‹ Ant</button>
+              <span style={{color:'var(--text-muted)'}}>
+                Pág. {safePage + 1} / {pageCount || 1} · <strong style={{color:'var(--text)'}}>{sortedRanking.length}</strong> combos
+                {status === 'running' && ' · actualizando...'}
+              </span>
+              <button className="apply-btn" disabled={safePage >= pageCount - 1} onClick={() => setCurrentPage(p => Math.min(pageCount - 1, p + 1))}>Sig ›</button>
+              <button className="apply-btn" disabled={safePage >= pageCount - 1} onClick={() => setCurrentPage(pageCount - 1)}>»</button>
             </div>
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Score</th>
-                    <th>Start</th><th>Inc</th><th>Max</th><th>LR</th><th>TP%</th><th>SL%</th>
-                    <th>Trades</th><th>Win%</th><th>Neto%</th><th>Drawdown%</th><th>Capital $</th>
-                    <th>Aplicar</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ranking.map((r, i) => (
-                    <tr key={i} className="row-win">
-                      <td>{i + 1}</td>
-                      <td style={{color:'var(--accent)', fontWeight:600}}>{r._score?.toFixed(2)}</td>
-                      <td>{r.sarStart}</td>
-                      <td>{r.sarInc}</td>
-                      <td>{r.sarMax}</td>
-                      <td>{r.pivotLr}</td>
-                      <td>{r.tpPct}</td>
-                      <td>{r.slPct}</td>
-                      <td>{r.totalClosed}</td>
-                      <td>{r.winRate}%</td>
-                      <td className="tp-cell">{r.totalNetPct}%</td>
-                      <td className={parseFloat(r.maxDrawdownPct) > 30 ? 'sl-cell' : ''}>{r.maxDrawdownPct}%</td>
-                      <td>${parseFloat(r.compoundCapital).toLocaleString('es-CO', {minimumFractionDigits:2})}</td>
-                      <td><button className="apply-btn" onClick={() => applyParams(r)} title="Aplicar en pestaña SAR">▶</button></td>
+          )
+          return (
+            <>
+              <div className="optim-rank-meta">
+                Ranking por Score = Neto% ÷ DD% · filtro: neto &gt; 0% · DD ≤ 50% · mín. 5 trades
+                {status === 'running' && ' · actualizando en vivo...'}
+              </div>
+              <PagBar />
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <SortTh col="_score"          label="Score" />
+                      <SortTh col="sarStart"         label="Start" />
+                      <SortTh col="sarInc"           label="Inc" />
+                      <SortTh col="sarMax"           label="Max" />
+                      <SortTh col="pivotLr"          label="LR" />
+                      <SortTh col="tpPct"            label="TP%" />
+                      <SortTh col="slPct"            label="SL%" />
+                      <SortTh col="totalClosed"      label="Trades" />
+                      <SortTh col="winRate"          label="Win%" />
+                      <SortTh col="totalNetPct"      label="Neto%" />
+                      <SortTh col="maxDrawdownPct"   label="DD%" />
+                      <SortTh col="compoundCapital"  label="Capital $" />
+                      <th>Aplicar</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
+                  </thead>
+                  <tbody>
+                    {pagedRows.map((r, i) => {
+                      const globalIdx = safePage * SAR_PAGE_SIZE + i
+                      return (
+                        <tr key={globalIdx} className="row-win">
+                          <td>{globalIdx + 1}</td>
+                          <td style={{color:'var(--accent)', fontWeight:600}}>{r._score?.toFixed(2)}</td>
+                          <td>{r.sarStart}</td>
+                          <td>{r.sarInc}</td>
+                          <td>{r.sarMax}</td>
+                          <td>{r.pivotLr}</td>
+                          <td>{r.tpPct}</td>
+                          <td>{r.slPct}</td>
+                          <td>{r.totalClosed}</td>
+                          <td>{r.winRate}%</td>
+                          <td className="tp-cell">{r.totalNetPct}%</td>
+                          <td className={parseFloat(r.maxDrawdownPct) > 50 ? 'sl-cell' : ''}>{r.maxDrawdownPct}%</td>
+                          <td style={{color:'var(--green)', fontWeight:600}}>${parseFloat(r.compoundCapital).toLocaleString('es-CO', {minimumFractionDigits:2})}</td>
+                          <td><button className="apply-btn" onClick={() => applyParams(r)} title="Aplicar en pestaña SAR">▶</button></td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <PagBar />
+            </>
+          )
+        })()}
       </div>
     </div>
   )
@@ -1428,7 +1535,7 @@ function SupertrendOptimView() {
   )
 }
 
-function SupertrendView() {
+function SupertrendView({ dcaMode = false }) {
   const [params, setParams]     = useState(DEFAULT_SUPERTREND_PARAMS)
   const [result, setResult]     = useState(null)
   const [loading, setLoading]   = useState(false)
@@ -1478,7 +1585,7 @@ function SupertrendView() {
       if (!resp.ok) throw new Error((await resp.json()).error)
       const { candles, total } = await resp.json()
       if (total === 0) throw new Error('No se encontraron velas en ese rango de fechas.')
-      const bt = runSupertrendBacktest(candles, params)
+      const bt = dcaMode ? runSupertrendDCABacktest(candles, params) : runSupertrendBacktest(candles, params)
       if (!bt) throw new Error('No se pudieron calcular resultados.')
       setResult(bt)
       setActiveTab('stats')
@@ -1526,7 +1633,7 @@ function SupertrendView() {
       if (!resp.ok) throw new Error((await resp.json()).error)
       const { candles, total } = await resp.json()
       if (total === 0) throw new Error('No se encontraron velas en ese rango de fechas.')
-      const bt = runMultiSupertrendBacktest(candles, multiCombos, {
+      const bt = (dcaMode ? runMultiSupertrendDCABacktest : runMultiSupertrendBacktest)(candles, multiCombos, {
         feeSlPct:       params.feeSlPct,
         feeTpPct:       params.feeTpPct,
         leverage:       params.leverage,
@@ -1558,7 +1665,7 @@ function SupertrendView() {
             <span className="logo-icon">₿</span>
             <div>
               <div className="logo-title">MariaPaz<span style={{color:'var(--accent)'}}>Indicator</span></div>
-              <div className="logo-sub">Supertrend · BTCUSDC · 15m</div>
+              <div className="logo-sub">{dcaMode ? 'Supertrend + DCA · BTCUSDC · 15m' : 'Supertrend · BTCUSDC · 15m'}</div>
             </div>
           </div>
           <div className={`db-badge ${dbStatus?.connected ? 'connected' : 'disconnected'}`}>
@@ -1571,13 +1678,20 @@ function SupertrendView() {
         <div className="strategy-nav">
           <button className="strategy-tab" onClick={() => { window.location.href = '/' }}>📐 Rango + Resistencias</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=sar' }}>📈 SAR</button>
-          <button className="strategy-tab active">📊 Supertrend</button>
+          {dcaMode
+            ? <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend' }}>📊 Supertrend</button>
+            : <button className="strategy-tab active">📊 Supertrend</button>}
+          {dcaMode
+            ? <button className="strategy-tab active">📊 ST + DCA</button>
+            : <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend-dca' }}>📊 ST + DCA</button>}
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=confluence' }}>🎯 Confluencia</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=emapullback' }}>📉 EMA Pullback</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=rangehigh' }}>🏔️ Rango Alto</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=scalping5m' }}>⚡ Scalping 5m</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=live' }}>🤖 Señales Live</button>
         </div>
       </header>
 
@@ -2185,12 +2299,15 @@ function AppMain() {
           <button className="strategy-tab active">📐 Rango + Resistencias</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=sar' }}>📈 SAR</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend' }}>📊 Supertrend</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend-dca' }}>📊 ST + DCA</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=confluence' }}>🎯 Confluencia</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=emapullback' }}>📉 EMA Pullback</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=rangehigh' }}>🏔️ Rango Alto</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=scalping5m' }}>⚡ Scalping 5m</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=live' }}>🤖 Señales Live</button>
         </div>
       </header>
 
@@ -3136,12 +3253,15 @@ function SarView() {
           <button className="strategy-tab" onClick={() => { window.location.href = '/' }}>📐 Rango + Resistencias</button>
           <button className="strategy-tab active">📈 SAR</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend' }}>📊 Supertrend</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend-dca' }}>📊 ST + DCA</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=confluence' }}>🎯 Confluencia</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=emapullback' }}>📉 EMA Pullback</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=rangehigh' }}>🏔️ Rango Alto</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=scalping5m' }}>⚡ Scalping 5m</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=live' }}>🤖 Señales Live</button>
         </div>
       </header>
 
@@ -3626,12 +3746,15 @@ function PinBarView() {
           <button className="strategy-tab" onClick={() => { window.location.href = '/' }}>📐 Rango + Resistencias</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=sar' }}>📈 SAR</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend' }}>📊 Supertrend</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend-dca' }}>📊 ST + DCA</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=confluence' }}>🎯 Confluencia</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=emapullback' }}>📉 EMA Pullback</button>
           <button className="strategy-tab active">🕯️ Pin Bar</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=rangehigh' }}>🏔️ Rango Alto</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=scalping5m' }}>⚡ Scalping 5m</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=live' }}>🤖 Señales Live</button>
         </div>
       </header>
 
@@ -4108,12 +4231,15 @@ function EmaPullbackView() {
           <button className="strategy-tab" onClick={() => { window.location.href = '/' }}>📐 Rango + Resistencias</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=sar' }}>📈 SAR</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend' }}>📊 Supertrend</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend-dca' }}>📊 ST + DCA</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=confluence' }}>🎯 Confluencia</button>
           <button className="strategy-tab active">📉 EMA Pullback</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=rangehigh' }}>🏔️ Rango Alto</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=scalping5m' }}>⚡ Scalping 5m</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=live' }}>🤖 Señales Live</button>
         </div>
       </header>
 
@@ -4367,12 +4493,15 @@ function EmaPullbackView() {
 // ConfluenceOptimView — Análisis profundo Confluencia (abre en pestaña nueva)
 // =============================================================================
 function ConfluenceOptimView() {
-  const [status, setStatus]   = useState('waiting')
+  const [status, setStatus]     = useState('waiting')
   const [progress, setProgress] = useState(null)
-  const [ranking, setRanking] = useState([])
+  const [ranking, setRanking]   = useState([])
   const [errorMsg, setErrorMsg] = useState('')
+  const [sortConfig, setSortConfig] = useState({ key: '_score', dir: 'desc' })
+  const [currentPage, setCurrentPage] = useState(0)
   const startTimeRef = useRef(null)
   const bcRef = useRef(null)
+  const CONF_PAGE_SIZE = 50
 
   useEffect(() => {
     const bc = new BroadcastChannel('btc-confluence-optim')
@@ -4415,6 +4544,22 @@ function ConfluenceOptimView() {
   }, [])
 
   function applyParams(row) { bcRef.current?.postMessage({ type: 'apply', row }) }
+
+  function handleSort(key) {
+    setSortConfig(prev => ({ key, dir: prev.key === key && prev.dir === 'desc' ? 'asc' : 'desc' }))
+    setCurrentPage(0)
+  }
+
+  const sortedRanking = useMemo(() => {
+    const arr = [...ranking]
+    const { key, dir } = sortConfig
+    arr.sort((a, b) => {
+      const av = parseFloat(a[key] ?? a._score)
+      const bv = parseFloat(b[key] ?? b._score)
+      return dir === 'desc' ? bv - av : av - bv
+    })
+    return arr
+  }, [ranking, sortConfig])
 
   const pct = progress ? Math.round(progress.done / progress.total * 100) : 0
 
@@ -4459,44 +4604,85 @@ function ConfluenceOptimView() {
           </div>
         )}
 
-        {ranking.length > 0 && (
-          <>
-            <div className="optim-rank-meta">
-              Ranking por Score = Neto% ÷ Drawdown% · filtro: neto &gt; 0% · mín. 5 trades · top 100
-              {status === 'running' && ' · actualizando en vivo...'}
+        {sortedRanking.length > 0 && (() => {
+          const pageCount = Math.ceil(sortedRanking.length / CONF_PAGE_SIZE)
+          const safePage  = Math.min(currentPage, Math.max(0, pageCount - 1))
+          const pagedRows = sortedRanking.slice(safePage * CONF_PAGE_SIZE, (safePage + 1) * CONF_PAGE_SIZE)
+          const SortTh = ({ col, label }) => {
+            const active = sortConfig.key === col
+            const icon   = active ? (sortConfig.dir === 'desc' ? ' ▼' : ' ▲') : ' ⇅'
+            return (
+              <th onClick={() => handleSort(col)} style={{cursor:'pointer', userSelect:'none', color: active ? 'var(--accent)' : undefined}}>
+                {label}{icon}
+              </th>
+            )
+          }
+          const PagBar = () => (
+            <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,padding:'6px 0',fontSize:12,flexWrap:'wrap'}}>
+              <button className="apply-btn" disabled={safePage === 0} onClick={() => setCurrentPage(0)}>«</button>
+              <button className="apply-btn" disabled={safePage === 0} onClick={() => setCurrentPage(p => Math.max(0, p - 1))}>‹ Ant</button>
+              <span style={{color:'var(--text-muted)'}}>
+                Pág. {safePage + 1} / {pageCount || 1} · <strong style={{color:'var(--text)'}}>{sortedRanking.length}</strong> combos
+                {status === 'running' && ' · actualizando...'}
+              </span>
+              <button className="apply-btn" disabled={safePage >= pageCount - 1} onClick={() => setCurrentPage(p => Math.min(pageCount - 1, p + 1))}>Sig ›</button>
+              <button className="apply-btn" disabled={safePage >= pageCount - 1} onClick={() => setCurrentPage(pageCount - 1)}>»</button>
             </div>
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>#</th><th>Score</th>
-                    <th>TP%</th><th>SL%</th><th>Conf.</th><th>RSI OB</th><th>RSI OS</th>
-                    <th>Trades</th><th>Win%</th><th>Neto%</th><th>Drawdown%</th>
-                    <th>Aplicar</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ranking.map((r, i) => (
-                    <tr key={i} className="row-win">
-                      <td>{i + 1}</td>
-                      <td style={{color:'var(--accent)', fontWeight:600}}>{parseFloat(r._score).toFixed(2)}</td>
-                      <td>{r.tpPct}</td>
-                      <td>{r.slPct}</td>
-                      <td>{r.confluencesRequired}</td>
-                      <td>{r.rsiOverbought}</td>
-                      <td>{r.rsiOversold}</td>
-                      <td>{r.totalClosed}</td>
-                      <td>{r.winRate}%</td>
-                      <td className="tp-cell">{r.totalNetPct}%</td>
-                      <td className={parseFloat(r.maxDrawdownPct) > 30 ? 'sl-cell' : ''}>{r.maxDrawdownPct}%</td>
-                      <td><button className="apply-btn" onClick={() => applyParams(r)} title="Aplicar en pestaña Confluencia">▶</button></td>
+          )
+          return (
+            <>
+              <div className="optim-rank-meta">
+                Ranking por Score = Neto% ÷ DD% · filtro: neto &gt; 0% · DD ≤ 50% · mín. 5 trades
+                {status === 'running' && ' · actualizando en vivo...'}
+              </div>
+              <PagBar />
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <SortTh col="_score"              label="Score" />
+                      <SortTh col="tpPct"               label="TP%" />
+                      <SortTh col="slPct"               label="SL%" />
+                      <SortTh col="confluencesRequired" label="Conf." />
+                      <SortTh col="rsiOverbought"       label="RSI OB" />
+                      <SortTh col="rsiOversold"         label="RSI OS" />
+                      <SortTh col="totalClosed"         label="Trades" />
+                      <SortTh col="winRate"             label="Win%" />
+                      <SortTh col="totalNetPct"         label="Neto%" />
+                      <SortTh col="maxDrawdownPct"      label="DD%" />
+                      <SortTh col="compoundCapital"     label="Capital $" />
+                      <th>Aplicar</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
+                  </thead>
+                  <tbody>
+                    {pagedRows.map((r, i) => {
+                      const globalIdx = safePage * CONF_PAGE_SIZE + i
+                      return (
+                        <tr key={globalIdx} className="row-win">
+                          <td>{globalIdx + 1}</td>
+                          <td style={{color:'var(--accent)', fontWeight:600}}>{parseFloat(r._score).toFixed(2)}</td>
+                          <td>{r.tpPct}</td>
+                          <td>{r.slPct}</td>
+                          <td>{r.confluencesRequired}</td>
+                          <td>{r.rsiOverbought}</td>
+                          <td>{r.rsiOversold}</td>
+                          <td>{r.totalClosed}</td>
+                          <td>{r.winRate}%</td>
+                          <td className="tp-cell">{r.totalNetPct}%</td>
+                          <td className={parseFloat(r.maxDrawdownPct) > 50 ? 'sl-cell' : ''}>{r.maxDrawdownPct}%</td>
+                          <td style={{color:'var(--green)', fontWeight:600}}>${r.compoundCapital}</td>
+                          <td><button className="apply-btn" onClick={() => applyParams(r)} title="Aplicar en pestaña Confluencia">▶</button></td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <PagBar />
+            </>
+          )
+        })()}
       </div>
     </div>
   )
@@ -4607,12 +4793,15 @@ function ConfluenceView() {
           <button className="strategy-tab" onClick={() => { window.location.href = '/' }}>📐 Rango + Resistencias</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=sar' }}>📈 SAR</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend' }}>📊 Supertrend</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend-dca' }}>📊 ST + DCA</button>
           <button className="strategy-tab active">🎯 Confluencia</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=emapullback' }}>📉 EMA Pullback</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=rangehigh' }}>🏔️ Rango Alto</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=scalping5m' }}>⚡ Scalping 5m</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=live' }}>🤖 Señales Live</button>
         </div>
       </header>
 
@@ -4713,6 +4902,18 @@ function ConfluenceView() {
               </InputGroup>
               <InputGroup label="Capital inicial ($)">
                 <input type="number" value={params.initialCapital} step="100"  min="1"   onChange={e => num('initialCapital', e.target.value)} />
+              </InputGroup>
+            </Section>
+
+            <Section title="🚫 Filtros">
+              <InputGroup label="Ignorar domingos" tooltip="No abrir trades en velas de domingo (baja liquidez)">
+                <label className="toggle">
+                  <input type="checkbox" checked={params.skipSundays ?? true} onChange={e => set('skipSundays', e.target.checked)} />
+                  <span className="toggle-track"><span className="toggle-thumb" /></span>
+                </label>
+              </InputGroup>
+              <InputGroup label="EMA tendencia" tooltip="Solo longs cuando close > EMA(N) · Solo shorts cuando close < EMA(N)">
+                <input type="number" value={params.emaTrend ?? 200} step="10" min="50" onChange={e => int('emaTrend', e.target.value)} />
               </InputGroup>
             </Section>
 
@@ -5622,12 +5823,15 @@ function SoporteView() {
           <button className="strategy-tab" onClick={() => { window.location.href = '/' }}>📐 Rango + Resistencias</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=sar' }}>📈 SAR</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend' }}>📊 Supertrend</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend-dca' }}>📊 ST + DCA</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=confluence' }}>🎯 Confluencia</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=emapullback' }}>📉 EMA Pullback</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
           <button className="strategy-tab active">📗 Rango + Soporte</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=rangehigh' }}>🏔️ Rango Alto</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=scalping5m' }}>⚡ Scalping 5m</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=live' }}>🤖 Señales Live</button>
         </div>
       </header>
 
@@ -7244,12 +7448,14 @@ function EmaView() {
       <button className="strategy-tab" onClick={() => { window.location.href = '/' }}>📐 Rango + Resistencias</button>
       <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=sar' }}>📈 SAR</button>
       <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend' }}>📊 Supertrend</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend-dca' }}>📊 ST + DCA</button>
       <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=confluence' }}>🎯 Confluencia</button>
       <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=emapullback' }}>📉 EMA Pullback</button>
       <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
       <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
       <button className="strategy-tab active">📡 EMA Touch</button>
       <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=rangehigh' }}>🏔️ Rango Alto</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=scalping5m' }}>⚡ Scalping 5m</button>
     </>
   )
 
@@ -7744,12 +7950,15 @@ function RangeHighView() {
           <button className="strategy-tab" onClick={() => { window.location.href = '/' }}>📐 Rango + Resistencias</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=sar' }}>📈 SAR</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend' }}>📊 Supertrend</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend-dca' }}>📊 ST + DCA</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=confluence' }}>🎯 Confluencia</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=emapullback' }}>📉 EMA Pullback</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
           <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
           <button className="strategy-tab active">🏔️ Rango Alto</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=scalping5m' }}>⚡ Scalping 5m</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=live' }}>🤖 Señales Live</button>
         </div>
       </header>
 
@@ -8020,9 +8229,11 @@ function SupertrendExcelOptimView() {
   const [showCombos, setShowCombos] = useState(false)
   const [minTrades, setMinTrades]   = useState(0)
   const [maxTrades, setMaxTrades]   = useState(9999)
+  const [currentPage, setCurrentPage] = useState(0)
   const startTimeRef = useRef(null)
   const workerRef    = useRef(null)
   const fileInputRef = useRef(null)
+  const EXCEL_PAGE_SIZE = 50
 
   function parseNum(v) {
     if (typeof v === 'number') return v
@@ -8106,11 +8317,13 @@ function SupertrendExcelOptimView() {
     }
     worker.onerror = (ev) => { setErrorMsg(ev.message); setStatus('error'); worker.terminate() }
     worker.postMessage({ combos, candles, params, groupSizes: [3,4,5,6,7,8,9,10,11,12,13,14,15], samplesPerSize: 5000 })
+    setCurrentPage(0)
   }
 
   function handleSort(key) {
     if (sortKey === key) setSortDir(d => d === 'desc' ? 'asc' : 'desc')
     else { setSortKey(key); setSortDir('desc') }
+    setCurrentPage(0)
   }
 
   const sortedRanking = useMemo(() => {
@@ -8294,76 +8507,2061 @@ function SupertrendExcelOptimView() {
           </div>
         )}
 
-        {ranking.length > 0 && (
-          <>
-            <div className="optim-rank-meta" style={{display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:10}}>
-              <span>{sortedRanking.length} / {ranking.length} grupos · Score = Neto% ÷ Drawdown% · drawdown ≤ 50%{isRunning && ' · actualizando en vivo...'}</span>
-              <div style={{display:'flex', alignItems:'center', gap:8, fontSize:12, fontFamily:'var(--font-mono)'}}>
-                <span style={{color:'var(--text-muted)'}}>Trades:</span>
-                <input type="number" min={0} value={minTrades} onChange={e => setMinTrades(Math.max(0, parseInt(e.target.value) || 0))}
-                  style={{width:60, background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'var(--radius)', color:'var(--text)', padding:'3px 7px', fontFamily:'var(--font-mono)', fontSize:12, textAlign:'center'}}/>
-                <span style={{color:'var(--text-muted)'}}>–</span>
-                <input type="number" min={0} value={maxTrades} onChange={e => setMaxTrades(Math.max(0, parseInt(e.target.value) || 9999))}
-                  style={{width:60, background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'var(--radius)', color:'var(--text)', padding:'3px 7px', fontFamily:'var(--font-mono)', fontSize:12, textAlign:'center'}}/>
+        {ranking.length > 0 && (() => {
+          const pageCount = Math.ceil(sortedRanking.length / EXCEL_PAGE_SIZE)
+          const safePage  = Math.min(currentPage, Math.max(0, pageCount - 1))
+          const pagedRows = sortedRanking.slice(safePage * EXCEL_PAGE_SIZE, (safePage + 1) * EXCEL_PAGE_SIZE)
+          const PagBar = () => (
+            <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,padding:'6px 0',fontSize:12,flexWrap:'wrap'}}>
+              <button className="apply-btn" disabled={safePage === 0} onClick={() => setCurrentPage(0)}>«</button>
+              <button className="apply-btn" disabled={safePage === 0} onClick={() => setCurrentPage(p => Math.max(0, p - 1))}>‹ Ant</button>
+              <span style={{color:'var(--text-muted)'}}>
+                Pág. {safePage + 1} / {pageCount || 1} · <strong style={{color:'var(--text)'}}>{sortedRanking.length}</strong> grupos
+                {isRunning && ' · actualizando...'}
+              </span>
+              <button className="apply-btn" disabled={safePage >= pageCount - 1} onClick={() => setCurrentPage(p => Math.min(pageCount - 1, p + 1))}>Sig ›</button>
+              <button className="apply-btn" disabled={safePage >= pageCount - 1} onClick={() => setCurrentPage(pageCount - 1)}>»</button>
+            </div>
+          )
+          return (
+            <>
+              <div className="optim-rank-meta" style={{display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:10}}>
+                <span>Score = Neto% ÷ Drawdown% · drawdown ≤ 50%{isRunning && ' · actualizando en vivo...'}</span>
+                <div style={{display:'flex', alignItems:'center', gap:8, fontSize:12, fontFamily:'var(--font-mono)'}}>
+                  <span style={{color:'var(--text-muted)'}}>Trades:</span>
+                  <input type="number" min={0} value={minTrades}
+                    onChange={e => { setMinTrades(Math.max(0, parseInt(e.target.value) || 0)); setCurrentPage(0) }}
+                    style={{width:60, background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'var(--radius)', color:'var(--text)', padding:'3px 7px', fontFamily:'var(--font-mono)', fontSize:12, textAlign:'center'}}/>
+                  <span style={{color:'var(--text-muted)'}}>–</span>
+                  <input type="number" min={0} value={maxTrades}
+                    onChange={e => { setMaxTrades(Math.max(0, parseInt(e.target.value) || 9999)); setCurrentPage(0) }}
+                    style={{width:60, background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'var(--radius)', color:'var(--text)', padding:'3px 7px', fontFamily:'var(--font-mono)', fontSize:12, textAlign:'center'}}/>
+                </div>
+              </div>
+              <PagBar />
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <SortTh col="_score"          label="Score"/>
+                      <SortTh col="size"            label="Combos"/>
+                      <th>Parámetros</th>
+                      <SortTh col="totalClosed"     label="Trades"/>
+                      <SortTh col="winRate"         label="Win%"/>
+                      <SortTh col="totalNetPct"     label="Neto%"/>
+                      <SortTh col="maxDrawdownPct"  label="Drawdown%"/>
+                      <SortTh col="compoundCapital" label="Capital $"/>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedRows.map((r, i) => {
+                      const globalIdx = safePage * EXCEL_PAGE_SIZE + i
+                      const net = parseFloat(r.totalNetPct)
+                      const dd  = parseFloat(r.maxDrawdownPct)
+                      const sizeColors = { 3:['var(--blue-dim)','var(--blue)'], 4:['var(--green-dim)','var(--green)'], 5:['var(--accent-dim)','var(--accent)'], 6:['var(--orange-dim)','var(--orange)'], 7:['var(--red-dim)','var(--red)'] }
+                      const [bgC, fgC] = sizeColors[r.size] ?? ['var(--bg-3)','var(--text)']
+                      return (
+                        <tr key={globalIdx} className="row-win">
+                          <td style={{color:'var(--text-muted)'}}>{globalIdx + 1}</td>
+                          <td style={{color:'var(--accent)', fontWeight:700}}>{r._score.toFixed(2)}</td>
+                          <td style={{textAlign:'center'}}>
+                            <span style={{padding:'2px 10px', borderRadius:20, fontSize:11, fontWeight:600, background:bgC, color:fgC}}>{r.size}</span>
+                          </td>
+                          <td style={{fontSize:10, lineHeight:1.8}}>
+                            {r.combos.map((c, ci) => (
+                              <div key={ci} style={{whiteSpace:'nowrap'}}>
+                                <span style={{color:'var(--text-muted)', marginRight:5}}>#{c.idx+1}</span>
+                                <span style={{color:'var(--text-dim)'}}>{comboLabel(c)}</span>
+                              </div>
+                            ))}
+                          </td>
+                          <td>{r.totalClosed}</td>
+                          <td>{r.winRate}%</td>
+                          <td className={net >= 0 ? 'tp-cell' : 'sl-cell'}>{r.totalNetPct}%</td>
+                          <td className={dd > 30 ? 'sl-cell' : ''}>{r.maxDrawdownPct}%</td>
+                          <td style={{fontWeight:600}}>
+                            ${parseFloat(r.compoundCapital).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <PagBar />
+            </>
+          )
+        })()}
+      </div>
+    </div>
+  )
+}
+
+// =============================================================================
+// Scalping 5m — Supertrend dual-timeframe (entrada 5m, filtro tendencia 15m)
+// =============================================================================
+const DEFAULT_SCALPING5M_OPTIM = {
+  atrPeriod5m:     { min: 5,   max: 20,  step: 1   },
+  atrMultiplier5m: { min: 1.5, max: 6.0, step: 0.5 },
+  tpPct:           { min: 0.2, max: 1.0, step: 0.1 },
+  slPct:           { min: 0.2, max: 0.8, step: 0.1 },
+  atrVolFilter:    { min: 0,   max: 2.0, step: 2.0 },
+  rsiThreshold:    { min: 0,   max: 70,  step: 35  },
+  bodyRatioMin:    { min: 0,   max: 0.5, step: 0.5 },
+  maxDdFilter:     50,
+  topN:            0,
+}
+
+const DEFAULT_SCALPING_5M_PARAMS = {
+  dateFrom:         '2024-01-01',
+  dateTo:           '2024-12-31',
+  atrPeriod5m:      10,
+  atrMultiplier5m:  3.0,
+  atrPeriod15m:     10,
+  atrMultiplier15m: 3.0,
+  use15mFilter:     true,
+  tpPct:            0.5,
+  slPct:            0.4,
+  feeTpPct:         0.05,
+  feeSlPct:         0.10,
+  leverage:         10,
+  initialCapital:   1000,
+  tradeDirection:   'both',
+  skipSundays:      true,
+  rsiThreshold:     0,
+  rsiPeriod:        14,
+  atrVolFilter:     0,
+  atrVolPeriod:     20,
+  bodyRatioMin:     0,
+  maxTradesPerDay:  0,
+}
+
+function countScalping5mCombinations(r) {
+  function rv(f) {
+    const s = f.step; if (s <= 0) return 1
+    return Math.floor((f.max - f.min) / s) + 1
+  }
+  const atrVF  = r.atrVolFilter  ? rv(r.atrVolFilter)  : 1
+  const rsiThr = r.rsiThreshold  ? rv(r.rsiThreshold)  : 1
+  const body   = r.bodyRatioMin  ? rv(r.bodyRatioMin)  : 1
+  return rv(r.atrPeriod5m) * rv(r.atrMultiplier5m) * atrVF * rsiThr * body * rv(r.tpPct) * rv(r.slPct)
+}
+
+function Scalping5mView() {
+  const [params, setParams]   = useState(DEFAULT_SCALPING_5M_PARAMS)
+  const [result, setResult]   = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError]     = useState(null)
+  const [dbStatus, setDbStatus]       = useState(null)
+  const [activeTab, setActiveTab]     = useState('stats')
+  const [optimMode, setOptimMode]     = useState(false)
+  const [optimRanges, setOptimRanges] = useState(DEFAULT_SCALPING5M_OPTIM)
+  const optimBcRef = useRef(null)
+
+  const estimatedCombos = useMemo(() => countScalping5mCombinations(optimRanges), [optimRanges])
+
+  useEffect(() => {
+    fetch('/api/status')
+      .then(r => r.json())
+      .then(d => setDbStatus(d))
+      .catch(() => setDbStatus({ connected: false }))
+  }, [])
+
+  const set    = (key, val) => setParams(p => ({ ...p, [key]: val }))
+  const num    = (key, val) => set(key, parseFloat(val) || 0)
+  const int    = (key, val) => set(key, parseInt(val)   || 1)
+  const setOpt = (field, key, val) =>
+    setOptimRanges(r => ({ ...r, [field]: { ...r[field], [key]: parseFloat(val) || 0 } }))
+
+  async function handleOptimize() {
+    setError(null)
+
+    // Open BEFORE any await — keeps browser popup trust from the click event
+    window.open(window.location.pathname + '?strategy=scalping5m&mode=optim', '_blank')
+
+    if (optimBcRef.current) optimBcRef.current.close()
+    const bc = new BroadcastChannel('btc-scalping5m-optim')
+    optimBcRef.current = bc
+
+    // Flag so we can send init as soon as data is ready AND ready signal arrives
+    let initPayload = null
+    let readyReceived = false
+
+    bc.onmessage = (e) => {
+      if (e.data.type === 'ready') {
+        readyReceived = true
+        if (initPayload) bc.postMessage({ type: 'init', ...initPayload })
+      } else if (e.data.type === 'apply') {
+        setParams(p => ({
+          ...p,
+          atrPeriod5m:     e.data.row.atrPeriod5m,
+          atrMultiplier5m: e.data.row.atrMultiplier5m,
+          atrVolFilter:    e.data.row.atrVolFilter  ?? 0,
+          rsiThreshold:    e.data.row.rsiThreshold  ?? 0,
+          bodyRatioMin:    e.data.row.bodyRatioMin  ?? 0,
+          tpPct:           e.data.row.tpPct,
+          slPct:           e.data.row.slPct,
+        }))
+      }
+    }
+
+    try {
+      const [r5m, r15m] = await Promise.all([
+        fetch(`/api/candles?from=${params.dateFrom}&to=${params.dateTo}&timeframe=5m`),
+        fetch(`/api/candles?from=${params.dateFrom}&to=${params.dateTo}&timeframe=15m`),
+      ])
+      if (!r5m.ok)  throw new Error((await r5m.json()).error)
+      if (!r15m.ok) throw new Error((await r15m.json()).error)
+      const { candles: candles5m,  total: t5m  } = await r5m.json()
+      const { candles: candles15m, total: t15m } = await r15m.json()
+      if (!t5m)  throw new Error('No hay velas 5m en ese rango.')
+      if (!t15m) throw new Error('No hay velas 15m en ese rango.')
+
+      initPayload = { candles5m, candles15m, optimRanges, params }
+      if (readyReceived) bc.postMessage({ type: 'init', ...initPayload })
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
+  async function handleRun() {
+    setLoading(true); setError(null); setResult(null)
+    try {
+      const [r5m, r15m] = await Promise.all([
+        fetch(`/api/candles?from=${params.dateFrom}&to=${params.dateTo}&timeframe=5m`),
+        fetch(`/api/candles?from=${params.dateFrom}&to=${params.dateTo}&timeframe=15m`),
+      ])
+      if (!r5m.ok)  throw new Error((await r5m.json()).error)
+      if (!r15m.ok) throw new Error((await r15m.json()).error)
+      const { candles: c5m,  total: t5m  } = await r5m.json()
+      const { candles: c15m, total: t15m } = await r15m.json()
+      if (!t5m)  throw new Error('No hay velas 5m en ese rango.')
+      if (!t15m) throw new Error('No hay velas 15m en ese rango.')
+      const bt = runScalping5mBacktest(c5m, c15m, params)
+      if (!bt) throw new Error('No se pudieron calcular resultados.')
+      setResult(bt)
+      setActiveTab('stats')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const stats   = result?.stats
+  const netPct  = stats ? parseFloat(stats.totalNetPct) : 0
+  const winRate = stats ? parseFloat(stats.winRate)     : 0
+
+  return (
+    <div className="app">
+      <header className="header">
+        <div className="header-inner">
+          <div className="logo">
+            <span className="logo-icon">₿</span>
+            <div>
+              <div className="logo-title">MariaPaz<span style={{color:'var(--accent)'}}>Indicator</span></div>
+              <div className="logo-sub">Scalping 5m · Supertrend Dual-TF · BTCUSDC</div>
+            </div>
+          </div>
+          <div className={`db-badge ${dbStatus?.connected ? 'connected' : 'disconnected'}`}>
+            <span className="db-dot" />
+            {dbStatus?.connected
+              ? `BD conectada · ${dbStatus.totalCandles?.toLocaleString()} velas`
+              : dbStatus?.error ?? 'Conectando...'}
+          </div>
+        </div>
+        <div className="strategy-nav">
+          <button className="strategy-tab" onClick={() => { window.location.href = '/' }}>📐 Rango + Resistencias</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=sar' }}>📈 SAR</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend' }}>📊 Supertrend</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend-dca' }}>📊 ST + DCA</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=confluence' }}>🎯 Confluencia</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=emapullback' }}>📉 EMA Pullback</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=rangehigh' }}>🏔️ Rango Alto</button>
+          <button className="strategy-tab active">⚡ Scalping 5m</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=live' }}>🤖 Señales Live</button>
+        </div>
+      </header>
+
+      <div className="layout">
+        <aside className="sidebar">
+          <div className="sidebar-scroll">
+
+            <Section title="📅 Rango de fechas">
+              <InputGroup label="Desde">
+                <input type="date" value={params.dateFrom} onChange={e => set('dateFrom', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Hasta">
+                <input type="date" value={params.dateTo} onChange={e => set('dateTo', e.target.value)} />
+              </InputGroup>
+            </Section>
+
+            <Section title="⚡ Supertrend 5m (entrada)">
+              <InputGroup label="ATR Period">
+                <input type="number" min="1" value={params.atrPeriod5m} onChange={e => int('atrPeriod5m', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="ATR Multiplier">
+                <input type="number" step="0.5" min="0.5" value={params.atrMultiplier5m} onChange={e => num('atrMultiplier5m', e.target.value)} />
+              </InputGroup>
+            </Section>
+
+            <Section title="📊 Supertrend 15m (filtro)">
+              <InputGroup label="Filtro activo">
+                <label style={{display:'flex',alignItems:'center',gap:8}}>
+                  <input type="checkbox" checked={params.use15mFilter} onChange={e => set('use15mFilter', e.target.checked)} />
+                  <span>{params.use15mFilter ? 'Sí' : 'No'}</span>
+                </label>
+              </InputGroup>
+              <InputGroup label="ATR Period">
+                <input type="number" min="1" value={params.atrPeriod15m} onChange={e => int('atrPeriod15m', e.target.value)} disabled={!params.use15mFilter} />
+              </InputGroup>
+              <InputGroup label="ATR Multiplier">
+                <input type="number" step="0.5" min="0.5" value={params.atrMultiplier15m} onChange={e => num('atrMultiplier15m', e.target.value)} disabled={!params.use15mFilter} />
+              </InputGroup>
+            </Section>
+
+            <Section title="⚖️ TP / SL">
+              <InputGroup label="TP (%)">
+                <input type="number" step="0.05" min="0.01" value={params.tpPct} onChange={e => num('tpPct', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="SL (%)">
+                <input type="number" step="0.05" min="0.01" value={params.slPct} onChange={e => num('slPct', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Fee SL extra (%)">
+                <input type="number" step="0.01" min="0" value={params.feeSlPct} onChange={e => num('feeSlPct', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Fee TP (%)">
+                <input type="number" step="0.01" min="0" value={params.feeTpPct} onChange={e => num('feeTpPct', e.target.value)} />
+              </InputGroup>
+            </Section>
+
+            <Section title="📊 Capital">
+              <InputGroup label="Capital inicial ($)">
+                <input type="number" step="100" min="1" value={params.initialCapital} onChange={e => num('initialCapital', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Apalancamiento">
+                <input type="number" step="1" min="1" value={params.leverage} onChange={e => num('leverage', e.target.value)} />
+              </InputGroup>
+            </Section>
+
+            <Section title="🔧 Filtros">
+              <InputGroup label="Dirección">
+                <select value={params.tradeDirection} onChange={e => set('tradeDirection', e.target.value)}>
+                  <option value="both">Ambas</option>
+                  <option value="long">Solo Long</option>
+                  <option value="short">Solo Short</option>
+                </select>
+              </InputGroup>
+              <InputGroup label="Omitir domingos">
+                <label style={{display:'flex',alignItems:'center',gap:8}}>
+                  <input type="checkbox" checked={params.skipSundays} onChange={e => set('skipSundays', e.target.checked)} />
+                  <span>{params.skipSundays ? 'Sí' : 'No'}</span>
+                </label>
+              </InputGroup>
+              <InputGroup label="Max trades/día (0=∞)">
+                <input type="number" min="0" value={params.maxTradesPerDay} onChange={e => int('maxTradesPerDay', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="RSI Threshold (0=off)" tooltip="No LONG si RSI > umbral · no SHORT si RSI < (100-umbral)">
+                <input type="number" min="0" max="100" step="5" value={params.rsiThreshold} onChange={e => num('rsiThreshold', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="ATR Vol Filter (0=off)" tooltip="Solo opera si ATR actual ≤ valor × SMA(ATR)">
+                <input type="number" min="0" step="0.1" value={params.atrVolFilter} onChange={e => num('atrVolFilter', e.target.value)} />
+              </InputGroup>
+              <InputGroup label="Body Ratio Min (0=off)" tooltip="Mínimo cuerpo/rango de la vela de señal">
+                <input type="number" min="0" max="1" step="0.1" value={params.bodyRatioMin} onChange={e => num('bodyRatioMin', e.target.value)} />
+              </InputGroup>
+            </Section>
+
+            {/* ── ANÁLISIS PROFUNDO ── */}
+            <div className="section optim-section">
+              <div className="optim-section-header" onClick={() => setOptimMode(v => !v)}>
+                <span className="section-title" style={{marginBottom:0, borderBottom:'none', paddingBottom:0}}>🔬 Análisis Profundo</span>
+                <span className="optim-chevron">{optimMode ? '▲' : '▼'}</span>
+              </div>
+              {optimMode && (
+                <div className="optim-body">
+                  <div className="optim-hint">
+                    <span>Parámetro</span><span>Min</span><span>Max</span><span>Paso</span>
+                  </div>
+                  <OptimRow label="ATR Per. 5m"  field="atrPeriod5m"     stepHint="1"   ranges={optimRanges} onChange={setOpt} />
+                  <OptimRow label="ATR Mult. 5m" field="atrMultiplier5m" stepHint="0.5" ranges={optimRanges} onChange={setOpt} />
+                  <OptimRow label="TP %"         field="tpPct"           stepHint="0.1" ranges={optimRanges} onChange={setOpt} />
+                  <OptimRow label="SL %"         field="slPct"           stepHint="0.1" ranges={optimRanges} onChange={setOpt} />
+                  <OptimRow label="ATR Vol"      field="atrVolFilter"    stepHint="0.5" ranges={optimRanges} onChange={setOpt} />
+                  <OptimRow label="RSI Thr."     field="rsiThreshold"    stepHint="5"   ranges={optimRanges} onChange={setOpt} />
+                  <OptimRow label="Body Min"     field="bodyRatioMin"    stepHint="0.1" ranges={optimRanges} onChange={setOpt} />
+                  <div style={{display:'flex', gap:8, marginTop:4}}>
+                    <div style={{flex:1}}>
+                      <div className="optim-label" style={{fontSize:11, marginBottom:2}}>DD máx. filtro %</div>
+                      <input type="number" min="1" value={optimRanges.maxDdFilter} onChange={e => setOptimRanges(r => ({...r, maxDdFilter: parseFloat(e.target.value) || 30}))} />
+                    </div>
+                    <div style={{flex:1}}>
+                      <div className="optim-label" style={{fontSize:11, marginBottom:2}}>Top N (0=∞)</div>
+                      <input type="number" min="0" value={optimRanges.topN} onChange={e => setOptimRanges(r => ({...r, topN: parseInt(e.target.value) ?? 0}))} />
+                    </div>
+                  </div>
+                  <div className="optim-count">
+                    ~{estimatedCombos.toLocaleString()} combinaciones
+                    {estimatedCombos > 100000 && <span className="optim-warn"> · puede tardar</span>}
+                  </div>
+                </div>
+              )}
+            </div>
+
+          </div>
+
+          <div className="sidebar-footer">
+            {optimMode
+              ? <button className="run-btn optim-btn" onClick={handleOptimize} disabled={!dbStatus?.connected}>
+                  🔬 Abrir Análisis Profundo
+                </button>
+              : <button className="run-btn" onClick={handleRun} disabled={loading || !dbStatus?.connected}>
+                  {loading ? <><span className="spinner" /> Procesando...</> : '▶ Ejecutar Backtest'}
+                </button>
+            }
+            {error && <div className="error-box">⚠️ {error}</div>}
+          </div>
+        </aside>
+
+        <main className="main">
+          {!result && !loading && (
+            <div className="empty-state">
+              <div className="empty-icon">⚡</div>
+              <div className="empty-title">Scalping 5m — Supertrend Dual Timeframe</div>
+              <div className="empty-sub">
+                Entradas: cruce de Supertrend en 5m · Filtro: dirección Supertrend 15m<br/>
+                Configura los parámetros y ejecuta el backtest.
               </div>
             </div>
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <SortTh col="_score"          label="Score"/>
-                    <SortTh col="size"            label="Combos"/>
-                    <th>Parámetros</th>
-                    <SortTh col="totalClosed"     label="Trades"/>
-                    <SortTh col="winRate"         label="Win%"/>
-                    <SortTh col="totalNetPct"     label="Neto%"/>
-                    <SortTh col="maxDrawdownPct"  label="Drawdown%"/>
-                    <SortTh col="compoundCapital" label="Capital $"/>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedRanking.map((r, i) => {
-                    const net = parseFloat(r.totalNetPct)
-                    const dd  = parseFloat(r.maxDrawdownPct)
-                    const sizeColors = { 3:['var(--blue-dim)','var(--blue)'], 4:['var(--green-dim)','var(--green)'], 5:['var(--accent-dim)','var(--accent)'], 6:['var(--orange-dim)','var(--orange)'], 7:['var(--red-dim)','var(--red)'] }
-                    const [bgC, fgC] = sizeColors[r.size] ?? ['var(--bg-3)','var(--text)']
-                    return (
-                      <tr key={i} className="row-win">
-                        <td style={{color:'var(--text-muted)'}}>{i+1}</td>
-                        <td style={{color:'var(--accent)', fontWeight:700}}>{r._score.toFixed(2)}</td>
-                        <td style={{textAlign:'center'}}>
-                          <span style={{padding:'2px 10px', borderRadius:20, fontSize:11, fontWeight:600, background:bgC, color:fgC}}>{r.size}</span>
-                        </td>
-                        <td style={{fontSize:10, lineHeight:1.8}}>
-                          {r.combos.map((c, ci) => (
-                            <div key={ci} style={{whiteSpace:'nowrap'}}>
-                              <span style={{color:'var(--text-muted)', marginRight:5}}>#{c.idx+1}</span>
-                              <span style={{color:'var(--text-dim)'}}>{comboLabel(c)}</span>
-                            </div>
-                          ))}
-                        </td>
-                        <td>{r.totalClosed}</td>
-                        <td>{r.winRate}%</td>
-                        <td className={net >= 0 ? 'tp-cell' : 'sl-cell'}>{r.totalNetPct}%</td>
-                        <td className={dd > 30 ? 'sl-cell' : ''}>{r.maxDrawdownPct}%</td>
-                        <td style={{fontWeight:600}}>
-                          ${parseFloat(r.compoundCapital).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+          )}
+
+          {loading && (
+            <div className="empty-state">
+              <div className="loading-ring" />
+              <div className="empty-title">Analizando velas...</div>
+              <div className="empty-sub">Cargando datos 5m y 15m · ejecutando estrategia</div>
             </div>
-          </>
+          )}
+
+          {result && stats && (
+            <>
+              <div className="result-header">
+                <div className="result-meta">
+                  <span>📊 {result.totalCandles5m.toLocaleString()} velas 5m · {result.totalCandles15m.toLocaleString()} velas 15m</span>
+                  <span>·</span>
+                  <span>{params.dateFrom} → {params.dateTo}</span>
+                </div>
+                <div className="tabs">
+                  <button className={activeTab === 'stats'  ? 'tab active' : 'tab'} onClick={() => setActiveTab('stats')}>Estadísticas</button>
+                  <button className={activeTab === 'trades' ? 'tab active' : 'tab'} onClick={() => setActiveTab('trades')}>Trades ({result.trades.length})</button>
+                </div>
+              </div>
+
+              {activeTab === 'stats' && (
+                <div className="stats-grid">
+                  <StatCard label="Trades cerrados"              value={stats.totalClosed}           variant="neutral" />
+                  <StatCard label="TP ✅"                        value={stats.totalTp}               variant="win"     />
+                  <StatCard label="SL ❌"                        value={stats.totalSl}               variant="loss"    />
+                  <StatCard label="Win Rate"                     value={`${stats.winRate}%`}         variant={winRate >= 50 ? 'win' : 'loss'} />
+                  <StatCard label={`Neto simple x${params.leverage}`}     value={`${stats.totalNetPct}%`}    variant={netPct >= 0 ? 'win' : 'loss'} />
+                  <StatCard label="Máx. Drawdown"                value={`${stats.maxDrawdownPct}%`} variant="warn"    />
+                  <StatCard label="Capital simple"               value={`$${parseFloat(stats.simpleCapital).toLocaleString('es-CO', {minimumFractionDigits:2})}`}   variant="neutral" />
+                  <StatCard label="Capital compuesto"            value={`$${parseFloat(stats.compoundCapital).toLocaleString('es-CO', {minimumFractionDigits:2})}`} variant="accent"  />
+                  <StatCard label="Trades/día promedio"          value={stats.avgTradesPerDay}       variant="neutral" />
+                  <StatCard label={`TP efectivo x${params.leverage}`}     value={`${stats.effectiveTpPct.toFixed(2)}%`}  variant="neutral" />
+                  <StatCard label={`SL efectivo x${params.leverage}`}     value={`${stats.effectiveSlPct.toFixed(2)}%`}  variant="neutral" />
+                  <StatCard label="Mejor método"                 value={stats.bestMethod}            variant="accent"  />
+                </div>
+              )}
+
+              {activeTab === 'trades' && (
+                <div className="table-wrap">
+                  {result.trades.length === 0
+                    ? <div className="empty-table">No se cerraron trades en este período</div>
+                    : (
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>#</th><th>Lado</th><th>Señal (UTC)</th><th>Cierre (UTC)</th>
+                            <th>Precio</th><th>TP precio</th><th>SL precio</th>
+                            <th>Resultado</th><th>Capital entrada</th><th>Capital salida</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {result.trades.map((t, i) => (
+                            <tr key={i} className={t.result === 'TP' ? 'row-win' : 'row-loss'}>
+                              <td>{i + 1}</td>
+                              <td style={{color: t.side === 'LONG' ? 'var(--green)' : 'var(--red)', fontWeight:600}}>{t.side}</td>
+                              <td>{new Date(t.time).toLocaleString('es-CO', { timeZone: 'UTC' })}</td>
+                              <td>{new Date(t.closeTime).toLocaleString('es-CO', { timeZone: 'UTC' })}</td>
+                              <td>${parseFloat(t.price).toLocaleString('en-US')}</td>
+                              <td className="tp-cell">${parseFloat(t.tp).toLocaleString('en-US')}</td>
+                              <td className="sl-cell">${parseFloat(t.sl).toLocaleString('en-US')}</td>
+                              <td><span className={`badge badge-${t.result.toLowerCase()}`}>{t.result === 'TP' ? '✅ TP' : '❌ SL'}</span></td>
+                              <td>${parseFloat(t.capitalAtEntry).toLocaleString('es-CO', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                              <td className={t.result === 'TP' ? 'tp-cell' : 'sl-cell'}>${parseFloat(t.capitalAtExit).toLocaleString('es-CO', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )
+                  }
+                </div>
+              )}
+            </>
+          )}
+        </main>
+      </div>
+    </div>
+  )
+}
+
+const SCALPING_PAGE_SIZE = 50
+
+function Scalping5mOptimView() {
+  const [status, setStatus]     = useState('waiting')
+  const [progress, setProgress] = useState(null)
+  const [ranking, setRanking]   = useState([])
+  const [errorMsg, setErrorMsg] = useState('')
+  const [maxDdFilter, setMaxDdFilter] = useState(50)
+  const [currentPage, setCurrentPage] = useState(0)
+  const [sortConfig, setSortConfig]   = useState({ key: '_score', dir: 'desc' })
+
+  const startTimeRef    = useRef(null)
+  const bcRef           = useRef(null)
+  const workerRef       = useRef(null)
+  const initDataRef     = useRef(null)
+  const resumeOffsetRef = useRef(0)
+
+  function launchWorker(candles5m, candles15m, optimRanges, params, startOffset, initialRanking) {
+    if (workerRef.current) workerRef.current.terminate()
+    resumeOffsetRef.current = startOffset
+    startTimeRef.current    = Date.now()
+    const worker = new Worker(new URL('./scalping5mOptimWorker.js', import.meta.url), { type: 'module' })
+    workerRef.current = worker
+    worker.onmessage = (ev) => {
+      const m = ev.data
+      if (m.type === 'progress') {
+        const elapsed = Date.now() - startTimeRef.current
+        const newDone = m.done - resumeOffsetRef.current
+        let eta = null
+        if (newDone >= 1 && elapsed >= 300) eta = Math.round((m.total - m.done) / (newDone / elapsed))
+        setProgress({ done: m.done, total: m.total, eta })
+        if (m.topResults?.length > 0) setRanking(m.topResults)
+      } else if (m.type === 'done') {
+        setStatus('done')
+        setProgress(p => p ? { ...p, done: p.total } : null)
+        if (m.results?.length > 0) setRanking(m.results)
+        workerRef.current = null
+      } else if (m.type === 'error') {
+        setErrorMsg(m.message); setStatus('error'); workerRef.current = null
+      }
+    }
+    worker.onerror = (ev) => { setErrorMsg(ev.message); setStatus('error'); workerRef.current = null }
+    worker.postMessage({ candles5m, candles15m, optimRanges, params, startOffset, initialRanking })
+  }
+
+  useEffect(() => {
+    const bc = new BroadcastChannel('btc-scalping5m-optim')
+    bcRef.current = bc
+    const sendReady = () => bc.postMessage({ type: 'ready' })
+    sendReady()
+    // Retry until init received — covers slow fetches on the main tab
+    const retryTimers = [
+      setTimeout(sendReady, 1000),
+      setTimeout(sendReady, 3000),
+      setTimeout(sendReady, 6000),
+      setTimeout(sendReady, 12000),
+      setTimeout(sendReady, 20000),
+    ]
+    bc.onmessage = (e) => {
+      const msg = e.data
+      if (msg.type === 'init') {
+        retryTimers.forEach(clearTimeout)
+        const { candles5m, candles15m, optimRanges, params } = msg
+        initDataRef.current = { candles5m, candles15m, optimRanges, params }
+        setMaxDdFilter(optimRanges.maxDdFilter ?? 50)
+        setCurrentPage(0)
+        setStatus('running')
+        launchWorker(candles5m, candles15m, optimRanges, params, 0, [])
+      }
+    }
+    return () => {
+      retryTimers.forEach(clearTimeout)
+      bc.close()
+      if (workerRef.current) { workerRef.current.terminate(); workerRef.current = null }
+    }
+  }, [])
+
+  function applyParams(row) { bcRef.current?.postMessage({ type: 'apply', row }) }
+
+  function handleSort(key) {
+    setSortConfig(prev => prev.key === key
+      ? { key, dir: prev.dir === 'desc' ? 'asc' : 'desc' }
+      : { key, dir: 'desc' })
+    setCurrentPage(0)
+  }
+
+  const sortedRanking = useMemo(() => {
+    if (ranking.length === 0) return ranking
+    const { key, dir } = sortConfig
+    return [...ranking].sort((a, b) => {
+      const av = parseFloat(a[key]) || 0
+      const bv = parseFloat(b[key]) || 0
+      return dir === 'asc' ? av - bv : bv - av
+    })
+  }, [ranking, sortConfig])
+
+  function handlePause() {
+    if (workerRef.current) { workerRef.current.terminate(); workerRef.current = null }
+    setStatus('paused')
+  }
+
+  function handleResume() {
+    if (!initDataRef.current || !progress) return
+    const { candles5m, candles15m, optimRanges, params } = initDataRef.current
+    setStatus('running')
+    launchWorker(candles5m, candles15m, optimRanges, params, progress.done, ranking)
+  }
+
+  function handleExportExcel() {
+    if (ranking.length === 0) return
+    const rows = ranking.map((r, i) => ({
+      '#':           i + 1,
+      'Score':       parseFloat(r._score?.toFixed(4)),
+      'Per 5m':      r.atrPeriod5m,
+      'Mult 5m':     r.atrMultiplier5m,
+      'ATR Vol.':    r.atrVolFilter ?? 0,
+      'RSI':         r.rsiThreshold ?? 0,
+      'Body':        r.bodyRatioMin ?? 0,
+      'TP%':         r.tpPct,
+      'SL%':         r.slPct,
+      'Trades':      r.totalClosed,
+      'Win%':        r.winRate,
+      'Neto%':       r.totalNetPct,
+      'Drawdown%':   r.maxDrawdownPct,
+      'Capital$':    parseFloat(r.compoundCapital),
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Scalping5m Profundo')
+    XLSX.writeFile(wb, 'scalping5m_analisis_profundo.xlsx')
+  }
+
+  const pct = progress ? Math.round(progress.done / progress.total * 100) : 0
+
+  return (
+    <div className="optim-page">
+      <header className="optim-page-header">
+        <div className="logo">
+          <span className="logo-icon">₿</span>
+          <div>
+            <div className="logo-title">MariaPaz<span style={{color:'var(--accent)'}}>Indicator</span></div>
+            <div className="logo-sub">⚡ Scalping 5m · Análisis Profundo · Ranking en vivo</div>
+          </div>
+        </div>
+        <div className="optim-page-status">
+          {status === 'waiting' && 'Esperando datos de la pestaña Scalping 5m...'}
+          {status === 'running' && progress && (
+            <span>
+              {progress.done.toLocaleString()} / {progress.total.toLocaleString()} · {pct}%
+              {progress.eta != null && ` · faltan ${formatEta(progress.eta)}`}
+              {' · '}{ranking.length} en ranking
+              <button
+                style={{marginLeft:12, padding:'2px 10px', fontSize:12, cursor:'pointer', borderRadius:4, border:'1px solid var(--border)'}}
+                onClick={handlePause}
+              >⏸ Pausar</button>
+            </span>
+          )}
+          {status === 'paused' && (
+            <span>
+              <span style={{color:'#f0a500'}}>⏸ Pausado</span>
+              {' · '}{progress?.done?.toLocaleString()} / {progress?.total?.toLocaleString()} · {ranking.length} en ranking
+              <button style={{marginLeft:12, padding:'2px 10px', fontSize:12, cursor:'pointer', borderRadius:4, border:'1px solid var(--border)'}} onClick={handleResume}>▶ Reanudar</button>
+              <button style={{marginLeft:8, padding:'2px 10px', fontSize:12, cursor:'pointer', borderRadius:4, background:'var(--green)', color:'#000', border:'none'}} onClick={handleExportExcel} disabled={ranking.length === 0}>📥 Excel</button>
+            </span>
+          )}
+          {status === 'done' && <span style={{color:'var(--green)'}}>✅ Completado · {ranking.length} en ranking</span>}
+          {status === 'error' && <span style={{color:'var(--red)'}}>⚠️ {errorMsg}</span>}
+        </div>
+      </header>
+
+      {progress && (
+        <div className="optim-page-progress">
+          <div className="progress-track" style={{borderRadius:0, height:3}}>
+            <div className="progress-fill" style={{width:`${pct}%`, transition:'width 0.5s ease'}} />
+          </div>
+        </div>
+      )}
+
+      <div className="optim-page-body">
+        {status === 'waiting' && (
+          <div className="optim-page-waiting">
+            <div className="loading-ring" />
+            <div>Esperando datos del análisis profundo Scalping 5m...</div>
+            <div style={{fontSize:12}}>Haz clic en "🔬 Abrir Análisis Profundo" en la pestaña Scalping 5m</div>
+          </div>
         )}
+
+        {ranking.length > 0 && (status === 'done' || status === 'paused') && (
+          <div style={{padding:'8px 16px 0'}}>
+            <button className="run-btn optim-btn" style={{width:'100%', marginBottom:8, background:'var(--green)', color:'#000'}} onClick={handleExportExcel}>
+              📥 Exportar ranking a Excel
+            </button>
+          </div>
+        )}
+
+        {ranking.length > 0 && (() => {
+          const pageCount   = Math.ceil(sortedRanking.length / SCALPING_PAGE_SIZE)
+          const safePage    = Math.min(currentPage, pageCount - 1)
+          const pagedRows   = sortedRanking.slice(safePage * SCALPING_PAGE_SIZE, (safePage + 1) * SCALPING_PAGE_SIZE)
+          const SortTh = ({ label, col, style }) => {
+            const active = sortConfig.key === col
+            const arrow  = active ? (sortConfig.dir === 'desc' ? ' ▼' : ' ▲') : ' ⇅'
+            return (
+              <th onClick={() => handleSort(col)}
+                style={{ cursor:'pointer', userSelect:'none', whiteSpace:'nowrap',
+                  color: active ? 'var(--accent)' : undefined, ...style }}>
+                {label}<span style={{fontSize:10, opacity: active ? 1 : 0.4}}>{arrow}</span>
+              </th>
+            )
+          }
+          const PagBar = () => (
+            <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,padding:'6px 0',fontSize:12,flexWrap:'wrap'}}>
+              <button className="apply-btn" disabled={safePage === 0} onClick={() => setCurrentPage(0)}>«</button>
+              <button className="apply-btn" disabled={safePage === 0} onClick={() => setCurrentPage(p => Math.max(0, p - 1))}>‹ Ant</button>
+              <span style={{color:'var(--text-muted)'}}>
+                Pág. {safePage + 1} / {pageCount} · <strong style={{color:'var(--text)'}}>{ranking.length}</strong> resultados
+                {status === 'running' && ' · actualizando...'}
+              </span>
+              <button className="apply-btn" disabled={safePage >= pageCount - 1} onClick={() => setCurrentPage(p => Math.min(pageCount - 1, p + 1))}>Sig ›</button>
+              <button className="apply-btn" disabled={safePage >= pageCount - 1} onClick={() => setCurrentPage(pageCount - 1)}>»</button>
+            </div>
+          )
+          return (
+            <>
+              <div className="optim-rank-meta">
+                Score = Neto% ÷ DD% · neto &gt; 0% · DD ≤ {maxDdFilter}% · mín. 5 trades
+                {status === 'running' && ' · actualizando en tiempo real'}
+              </div>
+              <PagBar />
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <SortTh label="Score"    col="_score" />
+                      <SortTh label="Per 5m"   col="atrPeriod5m" />
+                      <SortTh label="Mult 5m"  col="atrMultiplier5m" />
+                      <SortTh label="ATR Vol." col="atrVolFilter" />
+                      <SortTh label="RSI"      col="rsiThreshold" />
+                      <SortTh label="Body"     col="bodyRatioMin" />
+                      <SortTh label="TP%"      col="tpPct" />
+                      <SortTh label="SL%"      col="slPct" />
+                      <SortTh label="Trades"   col="totalClosed" />
+                      <SortTh label="Win%"     col="winRate" />
+                      <SortTh label="Neto%"    col="totalNetPct" />
+                      <SortTh label="DD%"      col="maxDrawdownPct" />
+                      <SortTh label="Capital $" col="compoundCapital" />
+                      <th>Aplicar</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedRows.map((r, i) => {
+                      const globalIdx = safePage * SCALPING_PAGE_SIZE + i
+                      return (
+                        <tr key={globalIdx} className="row-win">
+                          <td style={{color:'var(--text-muted)'}}>{globalIdx + 1}</td>
+                          <td style={{color:'var(--accent)', fontWeight:600}}>{r._score?.toFixed(2)}</td>
+                          <td>{r.atrPeriod5m}</td>
+                          <td>{r.atrMultiplier5m}</td>
+                          <td>{r.atrVolFilter ?? '—'}</td>
+                          <td>{r.rsiThreshold ?? '—'}</td>
+                          <td>{r.bodyRatioMin ?? '—'}</td>
+                          <td>{r.tpPct}</td>
+                          <td>{r.slPct}</td>
+                          <td>{r.totalClosed}</td>
+                          <td>{r.winRate}%</td>
+                          <td className={parseFloat(r.totalNetPct) >= 0 ? 'tp-cell' : 'sl-cell'}>{r.totalNetPct}%</td>
+                          <td>{r.maxDrawdownPct}%</td>
+                          <td style={{fontWeight:600}}>${parseFloat(r.compoundCapital).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                          <td><button className="apply-btn" onClick={() => applyParams(r)} title="Aplicar en pestaña Scalping 5m">▶</button></td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <PagBar />
+            </>
+          )
+        })()}
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DCA Live Dashboard — 3-Agent BTC/USDC System
+// ═══════════════════════════════════════════════════════════════════════════
+
+const DCA_MAX_LEGS      = 3
+const DCA_TRIGGER_PCT_UI = 2.0
+
+const C_LIVE = {
+  bg: '#0f172a', card: '#1e293b', card2: '#172032', border: '#334155',
+  muted: '#64748b', text: '#e2e8f0', green: '#22c55e', red: '#ef4444',
+  yellow: '#fbbf24', blue: '#60a5fa', purple: '#a78bfa', orange: '#fb923c',
+  teal: '#2dd4bf',
+}
+
+function AgentCard({ agentNum, title, badge, badgeColor, status, ts, reasoning, expanded, onToggle, children, accent }) {
+  const ac = accent ?? C_LIVE.blue
+  const borderStyle = status === 'complete'
+    ? `2px solid ${ac}`
+    : status === 'waiting'
+      ? `1px dashed ${C_LIVE.border}`
+      : `1px solid ${C_LIVE.border}`
+  const ago = iso => {
+    if (!iso) return null
+    const d = Date.now() - new Date(iso)
+    const m = Math.floor(d / 60000)
+    const h = Math.floor(m / 60)
+    return h > 0 ? `hace ${h}h ${m % 60}m` : `hace ${m}m`
+  }
+  return (
+    <div style={{
+      background: C_LIVE.card, borderRadius: 10, padding: '14px 18px', marginBottom: 6,
+      border: borderStyle,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: children || reasoning ? 10 : 0 }}>
+        <div style={{
+          width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: status === 'complete' ? ac : C_LIVE.border,
+          fontSize: 11, fontWeight: 700, color: '#fff',
+        }}>
+          {status === 'complete' ? agentNum : '·'}
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: status === 'complete' ? C_LIVE.text : C_LIVE.muted }}>
+            Agente {agentNum} — {title}
+          </div>
+          {ts && <div style={{ fontSize: 10, color: C_LIVE.muted }}>{ago(ts)}</div>}
+        </div>
+        {badge && (
+          <span style={{
+            background: `${badgeColor}25`, color: badgeColor,
+            padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700,
+          }}>{badge}</span>
+        )}
+        {status === 'waiting' && (
+          <span style={{ fontSize: 10, color: C_LIVE.muted, fontStyle: 'italic' }}>esperando…</span>
+        )}
+      </div>
+      {children}
+      {reasoning && (
+        <div>
+          <button onClick={onToggle} style={{
+            fontSize: 10, color: C_LIVE.muted, background: 'none', border: 'none',
+            cursor: 'pointer', padding: '2px 0', fontFamily: 'monospace',
+          }}>
+            {expanded ? '▲ Ocultar razonamiento' : '▼ Ver razonamiento'}
+          </button>
+          {expanded && (
+            <div style={{
+              marginTop: 6, padding: '10px 12px', background: C_LIVE.card2,
+              borderRadius: 6, fontSize: 11, color: '#94a3b8', lineHeight: 1.6,
+              borderLeft: `3px solid ${ac}`, fontStyle: 'italic',
+            }}>
+              {reasoning}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LiveSignalsView() {
+  const [data, setData]           = useState(null)
+  const [loading, setLoading]     = useState(true)
+  const [lastRefresh, setLastRefresh] = useState(null)
+  const [expanded, setExpanded]   = useState({})
+  const [resetting, setResetting]       = useState(false)
+  const [verifying, setVerifying]       = useState(false)
+  const [verifyResult, setVerifyResult] = useState(null)
+  const toggleExpand = key => setExpanded(p => ({ ...p, [key]: !p[key] }))
+
+  const handleReset = () => {
+    if (!window.confirm('¿Borrar operación activa y reiniciar el ciclo DCA?')) return
+    setResetting(true)
+    fetch('http://localhost:3001/api/reset', { method: 'POST' })
+      .then(r => r.json())
+      .then(() => { setResetting(false); setVerifyResult(null); fetchData() })
+      .catch(() => setResetting(false))
+  }
+
+  const handleVerifyTp = () => {
+    setVerifying(true)
+    setVerifyResult(null)
+    fetch('http://localhost:3001/api/verify-tp', { method: 'POST' })
+      .then(r => r.json())
+      .then(result => { setVerifying(false); setVerifyResult(result); if (result.hit) fetchData() })
+      .catch(() => { setVerifying(false); setVerifyResult({ error: 'Error de conexión' }) })
+  }
+
+  const fetchData = () => {
+    fetch('http://localhost:3001/api/signals')
+      .then(r => r.json())
+      .then(json => { setData(json); setLoading(false); setLastRefresh(new Date()) })
+      .catch(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    fetchData()
+    const t = setInterval(fetchData, 10_000)
+    return () => clearInterval(t)
+  }, [])
+
+  const navBtns = (
+    <div className="strategy-nav">
+      <button className="strategy-tab" onClick={() => { window.location.href = '/' }}>📐 Rango + Resistencias</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=sar' }}>📈 SAR</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend' }}>📊 Supertrend</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend-dca' }}>📊 ST + DCA</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=confluence' }}>🎯 Confluencia</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=emapullback' }}>📉 EMA Pullback</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=rangehigh' }}>🏔️ Rango Alto</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=scalping5m' }}>⚡ Scalping 5m</button>
+      <button className="strategy-tab active">🤖 DCA Live</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=dcastats' }}>📊 DCA Stats</button>
+    </div>
+  )
+
+  if (loading) return (
+    <div style={{ padding: 40, textAlign: 'center', color: '#aaa', background: C_LIVE.bg, minHeight: '100vh', fontFamily: 'monospace' }}>
+      {navBtns}
+      <p style={{ marginTop: 40 }}>Conectando al servicio DCA...</p>
+    </div>
+  )
+
+  const svc = data?.status ?? {}
+  const dca = data?.dcaState ?? {}
+  const btc = data?.currentPrice
+  const cvs = data?.candles ?? {}
+  const C   = C_LIVE
+  const $   = p => p != null ? `$${Number(p).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'
+  const tCO = iso => iso ? new Date(iso).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota', hour12: false }) : '—'
+  const ago = iso => {
+    if (!iso) return '—'
+    const d = Date.now() - new Date(iso), m = Math.floor(d / 60000), h = Math.floor(m / 60)
+    return h > 0 ? `hace ${h}h ${m % 60}m` : `hace ${m}m`
+  }
+  const expiresIn = levelSetAt => {
+    if (!levelSetAt) return null
+    const rem = new Date(levelSetAt).getTime() + 4 * 60 * 60 * 1000 - Date.now()
+    if (rem <= 0) return { label: 'Vencido', color: C.red }
+    const m = Math.floor(rem / 60000), h = Math.floor(m / 60)
+    const label = h > 0 ? `Vence en ${h}h ${m % 60}m` : `Vence en ${m}m`
+    return { label, color: h < 1 ? C.red : C.orange }
+  }
+
+  const STEPS = [
+    { key: 'IDLE',           label: 'Esperando',       icon: '⏳', sub: `Agente 1 ${svc.lastAgent1 ? ago(svc.lastAgent1) : 'aún no ha corrido'}` },
+    { key: 'WATCHING_LEVEL', label: 'Vigilando Niveles', icon: '👁', sub: (dca.supportPrice || dca.resistancePrice) ? `S:${$(dca.supportPrice)} R:${$(dca.resistancePrice)}` : '' },
+    { key: 'OPEN_1LEG',      label: '1ª Entrada',      icon: '①',  sub: dca.legs?.[0] ? `@ ${$(dca.legs[0].price)}` : '' },
+    { key: 'OPEN_2LEGS',     label: '2do DCA',         icon: '②',  sub: dca.legs?.[1] ? `@ ${$(dca.legs[1].price)}` : '' },
+    { key: 'OPEN_3LEGS',     label: '3er DCA',         icon: '③',  sub: dca.legs?.[2] ? `@ ${$(dca.legs[2].price)}` : '' },
+  ]
+  const curIdx  = STEPS.findIndex(s => s.key === dca.status)
+  const isOpen  = ['OPEN_1LEG', 'OPEN_2LEGS', 'OPEN_3LEGS'].includes(dca.status)
+  const dirCol  = dca.direction === 'LONG' ? C.green : dca.direction === 'SHORT' ? C.red : C.muted
+  const legs    = dca.legs ?? []
+
+  let pnlPct = null, pnlUsd = null
+  if (isOpen && btc && dca.pAvg && dca.direction) {
+    const raw = dca.direction === 'LONG'
+      ? (btc - dca.pAvg) / dca.pAvg * 100
+      : (dca.pAvg - btc) / dca.pAvg * 100
+    pnlPct = raw * 10
+    pnlUsd = (pnlPct / 100) * (legs.length * 20)
+  }
+
+  let priceBarPct = null
+  if (isOpen && btc && dca.currentTp) {
+    const refLo = dca.direction === 'LONG' ? (dca.currentSl ?? dca.pAvg * 0.96) : dca.currentTp
+    const refHi = dca.direction === 'LONG' ? dca.currentTp : (dca.currentSl ?? dca.pAvg * 1.04)
+    priceBarPct = Math.min(100, Math.max(0, (btc - refLo) / (refHi - refLo) * 100))
+    if (dca.direction === 'SHORT') priceBarPct = 100 - priceBarPct
+  }
+
+  // distPct not used in new dual-level layout (each card computes its own distance)
+
+  let nextDcaTrigger = null
+  if (isOpen && legs.length < DCA_MAX_LEGS) {
+    const last = legs.at(-1)
+    if (last) nextDcaTrigger = dca.direction === 'LONG'
+      ? last.price * (1 - DCA_TRIGGER_PCT_UI / 100)
+      : last.price * (1 + DCA_TRIGGER_PCT_UI / 100)
+  }
+
+  const expiry = expiresIn(dca.levelSetAt)
+  const card = { background: C.card, borderRadius: 10, padding: '16px 20px', marginBottom: 14 }
+  const lbl  = { fontSize: 11, color: C.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }
+  const mini = { background: C.card2, padding: '7px 12px', borderRadius: 6, fontSize: 11 }
+
+  return (
+    <div style={{ minHeight: '100vh', background: C.bg, color: C.text, fontFamily: 'monospace' }}>
+
+      {/* ── STICKY HEADER ── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+        padding: '10px 20px', background: '#080f1e',
+        borderBottom: `1px solid ${C.border}`, position: 'sticky', top: 0, zIndex: 10,
+      }}>
+        <span style={{ fontSize: 15, fontWeight: 700, color: C.blue, letterSpacing: -0.5 }}>DCA BOT</span>
+        <span style={{ color: C.border }}>|</span>
+        <span style={{ fontSize: 11 }}>
+          <span style={{ color: svc.running ? C.green : C.red }}>●</span>
+          {' '}{svc.running ? 'Activo' : 'Inactivo'}
+        </span>
+        <span style={{ color: C.border }}>|</span>
+        <span style={{ fontSize: 22, fontWeight: 700, color: '#f8fafc', letterSpacing: -1 }}>{$(btc)}</span>
+        <span style={{ fontSize: 11, color: C.muted }}>BTC/USDC</span>
+        <span style={{ color: C.border }}>|</span>
+        <span style={{ fontSize: 11, color: C.muted }}>
+          15m <b style={{ color: C.text }}>{tCO(svc.lastUpdate15m)}</b>
+          &nbsp; 5m <b style={{ color: C.text }}>{tCO(svc.lastUpdate5m)}</b>
+          &nbsp; · &nbsp; {cvs.count15m ?? 0} / {cvs.count5m ?? 0} velas
+        </span>
+        {svc.error && (
+          <><span style={{ color: C.border }}>|</span>
+          <span style={{ fontSize: 11, color: C.red }}>⚠ {svc.error}</span></>
+        )}
+        <span style={{ marginLeft: 'auto', fontSize: 10, color: '#334155' }}>
+          {lastRefresh && `↻ ${lastRefresh.toLocaleTimeString()}`}
+        </span>
+        <button
+          onClick={handleReset}
+          disabled={resetting}
+          style={{
+            background: resetting ? C_LIVE.border : '#1e0a0a',
+            border: `1px solid ${C_LIVE.red}`,
+            color: resetting ? C_LIVE.muted : C_LIVE.red,
+            borderRadius: 5, padding: '3px 10px', fontSize: 11,
+            cursor: resetting ? 'default' : 'pointer', fontFamily: 'monospace',
+          }}
+        >
+          {resetting ? 'Reiniciando…' : '↺ Reiniciar'}
+        </button>
+      </div>
+
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '18px 16px' }}>
+        {navBtns}
+        <div style={{ marginTop: 14 }} />
+
+        {/* ── STATE MACHINE PIPELINE ── */}
+        <div style={{ ...card, padding: '18px 20px' }}>
+          <div style={{ ...lbl, marginBottom: 14 }}>Flujo del Sistema</div>
+          <div style={{ display: 'flex', alignItems: 'stretch', overflowX: 'auto', gap: 0 }}>
+            {STEPS.map((step, idx) => {
+              const isPast    = idx < curIdx
+              const isCurrent = idx === curIdx
+              const stepColor = isCurrent ? C.blue : isPast ? C.green : C.border
+              return (
+                <React.Fragment key={step.key}>
+                  <div style={{
+                    flex: '0 0 auto', textAlign: 'center', padding: '10px 16px', minWidth: 120,
+                    borderRadius: 8, border: `2px solid ${stepColor}`,
+                    background: isCurrent ? '#0f2346' : isPast ? '#0a1f12' : 'transparent',
+                  }}>
+                    <div style={{ fontSize: 20, marginBottom: 3 }}>{isPast ? '✅' : step.icon}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: isCurrent ? C.blue : isPast ? C.green : C.muted }}>
+                      {step.label}
+                    </div>
+                    {isCurrent && step.sub && (
+                      <div style={{ fontSize: 10, color: C.yellow, marginTop: 3, whiteSpace: 'nowrap' }}>{step.sub}</div>
+                    )}
+                    {isCurrent && isOpen && pnlPct !== null && (
+                      <div style={{ fontSize: 11, fontWeight: 700, color: pnlPct >= 0 ? C.green : C.red, marginTop: 3 }}>
+                        {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
+                      </div>
+                    )}
+                  </div>
+                  {idx < STEPS.length - 1 && (
+                    <div style={{
+                      flex: '1 1 24px', alignSelf: 'center', height: 2, minWidth: 16, maxWidth: 48,
+                      background: idx < curIdx ? C.green : C.border,
+                    }} />
+                  )}
+                </React.Fragment>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* ── MAIN TWO-COLUMN ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+
+          {/* LEFT: Level + Position + Legs */}
+          <div>
+
+            {/* Dual level cards: resistance above + support below */}
+            {(dca.resistancePrice || dca.supportPrice) ? (() => {
+              const resDistPct = dca.resistancePrice && btc ? (dca.resistancePrice - btc) / btc * 100 : null
+              const supDistPct = dca.supportPrice    && btc ? (btc - dca.supportPrice) / btc * 100    : null
+              const touchedRes = dca.levelType === 'resistance'
+              const touchedSup = dca.levelType === 'support'
+              return (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <div style={{ ...lbl, margin: 0 }}>Niveles detectados</div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 11 }}>
+                      {dca.levelSetAt && <span style={{ color: C.muted }}>Detectado: {ago(dca.levelSetAt)}</span>}
+                      {expiry && dca.status === 'WATCHING_LEVEL' && <span style={{ color: expiry.color, fontWeight: 600 }}>{expiry.label}</span>}
+                    </div>
+                  </div>
+
+                  {/* Resistance above */}
+                  <div style={{
+                    background: touchedRes ? '#1a0a1f' : C.card2, borderRadius: 8, padding: '10px 14px', marginBottom: 6,
+                    border: `2px solid ${touchedRes ? C.red : resDistPct != null && resDistPct < 0.3 ? '#7f1d1d' : C.border}`,
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontSize: 10, color: C.red, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>
+                        ▲ Resistencia {dca.agent1?.resistanceTimeframe && `[${dca.agent1.resistanceTimeframe}]`}
+                        {touchedRes && <span style={{ marginLeft: 6 }}>⚡ TOCADA</span>}
+                      </span>
+                      {resDistPct != null && (
+                        <span style={{ fontSize: 11, fontWeight: 700, color: resDistPct < 0.3 ? C.orange : C.muted }}>
+                          +{resDistPct.toFixed(3)}%{resDistPct < 0.3 ? ' · ⚡ Aproximándose' : ''}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: C.red, letterSpacing: -0.5 }}>
+                      {$(dca.resistancePrice)}
+                    </div>
+                  </div>
+
+                  {/* Current price indicator */}
+                  <div style={{
+                    textAlign: 'center', padding: '5px 0', fontSize: 13, fontWeight: 700,
+                    color: C.blue, borderLeft: `2px solid ${C.border}`, marginLeft: 20,
+                  }}>
+                    ● {$(btc)} <span style={{ fontSize: 10, color: C.muted, fontWeight: 400 }}>precio actual</span>
+                  </div>
+
+                  {/* Support below */}
+                  <div style={{
+                    background: touchedSup ? '#0a1a0f' : C.card2, borderRadius: 8, padding: '10px 14px', marginTop: 6,
+                    border: `2px solid ${touchedSup ? C.green : supDistPct != null && supDistPct < 0.3 ? '#14532d' : C.border}`,
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontSize: 10, color: C.green, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>
+                        ▼ Soporte {dca.agent1?.supportTimeframe && `[${dca.agent1.supportTimeframe}]`}
+                        {touchedSup && <span style={{ marginLeft: 6 }}>⚡ TOCADO</span>}
+                      </span>
+                      {supDistPct != null && (
+                        <span style={{ fontSize: 11, fontWeight: 700, color: supDistPct < 0.3 ? C.orange : C.muted }}>
+                          -{supDistPct.toFixed(3)}%{supDistPct < 0.3 ? ' · ⚡ Aproximándose' : ''}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: C.green, letterSpacing: -0.5 }}>
+                      {$(dca.supportPrice)}
+                    </div>
+                  </div>
+                </div>
+              )
+            })() : (
+              <div style={{ ...card, borderLeft: `4px solid ${C.border}`, color: C.muted, fontSize: 13, marginBottom: 14 }}>
+                Sin niveles activos — Agente 1 detectará soporte y resistencia en el próximo ciclo 15m
+              </div>
+            )}
+
+            {/* Position card */}
+            {isOpen && (
+              <div style={{ ...card, borderLeft: `4px solid ${dirCol}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                  <div style={{ ...lbl, margin: 0 }}>Posición Activa</div>
+                  <div style={{
+                    padding: '3px 12px', borderRadius: 5, fontSize: 13, fontWeight: 700,
+                    background: dca.direction === 'LONG' ? '#0a2318' : '#1f0a0a',
+                    color: dirCol,
+                  }}>
+                    {dca.direction === 'LONG' ? '⬆ LONG' : '⬇ SHORT'}
+                  </div>
+                  <div style={{ marginLeft: 'auto', fontSize: 11, color: C.muted }}>
+                    {legs.length}/{DCA_MAX_LEGS} piernas &nbsp;·&nbsp; ${legs.length * 20} margen &nbsp;·&nbsp; ${legs.length * 20 * 10} notional
+                  </div>
+                </div>
+
+                {/* pAvg / TP / SL grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
+                  {[
+                    { lbl2: 'pAvg / BE',     val: $(dca.pAvg),       col: C.blue  },
+                    { lbl2: 'TP objetivo',   val: $(dca.currentTp),  col: C.green },
+                    { lbl2: 'SL stop',       val: dca.currentSl ? $(dca.currentSl) : 'Agente 3 →', col: C.red },
+                  ].map(({ lbl2, val, col }) => (
+                    <div key={lbl2} style={mini}>
+                      <div style={{ fontSize: 10, color: C.muted, marginBottom: 3 }}>{lbl2}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: col }}>{val}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* P&L box */}
+                {pnlPct !== null && (
+                  <div style={{
+                    padding: '10px 14px', borderRadius: 8, marginBottom: 12,
+                    background: pnlPct >= 0 ? '#061a0e' : '#1a0606',
+                    border: `1px solid ${pnlPct >= 0 ? '#14532d' : '#7f1d1d'}`,
+                    display: 'flex', gap: 20, alignItems: 'center',
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 10, color: C.muted, marginBottom: 2 }}>P&L (10x leverage)</div>
+                      <div style={{ fontSize: 24, fontWeight: 700, color: pnlPct >= 0 ? C.green : C.red }}>
+                        {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
+                      </div>
+                    </div>
+                    <div style={{ color: C.border }}>|</div>
+                    <div>
+                      <div style={{ fontSize: 10, color: C.muted, marginBottom: 2 }}>En USD</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: pnlPct >= 0 ? C.green : C.red }}>
+                        {pnlUsd >= 0 ? '+' : ''}{pnlUsd?.toFixed(2)}
+                      </div>
+                    </div>
+                    <div style={{ color: C.border }}>|</div>
+                    <div>
+                      <div style={{ fontSize: 10, color: C.muted, marginBottom: 2 }}>Precio actual</div>
+                      <div style={{ fontSize: 13, fontWeight: 700 }}>{$(btc)}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Price bar */}
+                {priceBarPct !== null && (
+                  <div style={{ marginBottom: 4 }}>
+                    <div style={{ position: 'relative', height: 7, background: C.card2, borderRadius: 4, overflow: 'visible' }}>
+                      <div style={{
+                        position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 4,
+                        width: `${priceBarPct}%`,
+                        background: pnlPct >= 0 ? C.green : C.red, transition: 'width 0.5s',
+                      }} />
+                      <div style={{
+                        position: 'absolute', left: `${priceBarPct}%`, top: -3,
+                        width: 13, height: 13, background: '#fff', borderRadius: '50%',
+                        transform: 'translateX(-50%)', border: `2px solid ${C.card}`,
+                      }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 10, color: C.muted }}>
+                      <span style={{ color: C.red }}>SL {$(dca.currentSl ?? null)}</span>
+                      <span style={{ color: C.blue }}>pAvg {$(dca.pAvg)}</span>
+                      <span style={{ color: C.green }}>TP {$(dca.currentTp)}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Verify TP/SL button */}
+                <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={handleVerifyTp}
+                    disabled={verifying}
+                    style={{
+                      background: '#0f1f2e', border: `1px solid ${C.blue}`,
+                      color: verifying ? C.muted : C.blue,
+                      borderRadius: 5, padding: '4px 12px', fontSize: 11,
+                      cursor: verifying ? 'default' : 'pointer', fontFamily: 'monospace',
+                    }}
+                  >
+                    {verifying ? 'Revisando velas…' : '🔍 Verificar TP/SL en historial 12h'}
+                  </button>
+                  {verifyResult && (
+                    <span style={{
+                      fontSize: 11, fontWeight: 700,
+                      color: verifyResult.error ? C.red
+                           : verifyResult.hit === 'TP' ? C.green
+                           : verifyResult.hit === 'SL' ? C.red
+                           : C.muted,
+                    }}>
+                      {verifyResult.error
+                        ? `⚠ ${verifyResult.error}`
+                        : verifyResult.hit
+                          ? `✓ ${verifyResult.hit} detectado en vela ${new Date(verifyResult.candleTime).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })} · H:${$(verifyResult.high)} L:${$(verifyResult.low)}`
+                          : '— No se encontró TP/SL en las últimas 12h'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Legs table */}
+            {isOpen && (
+              <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
+                <div style={{
+                  padding: '10px 16px', borderBottom: `1px solid ${C.card2}`,
+                  fontSize: 12, color: C.muted, fontWeight: 600,
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                }}>
+                  <span>Entradas DCA ({legs.length}/{DCA_MAX_LEGS})</span>
+                  {nextDcaTrigger && (
+                    <span style={{ fontSize: 11, color: C.orange }}>
+                      Próx. DCA trigger: {$(nextDcaTrigger)}
+                    </span>
+                  )}
+                </div>
+                <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: C.card2, color: C.muted }}>
+                      {['#', 'Precio entrada', 'Margen', 'vs pAvg'].map(h => (
+                        <th key={h} style={{ padding: '7px 14px', textAlign: 'left', fontWeight: 600 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Array.from({ length: DCA_MAX_LEGS }).map((_, i) => {
+                      const leg = legs[i]
+                      const dp  = leg && dca.pAvg ? (leg.price - dca.pAvg) / dca.pAvg * 100 : null
+                      return (
+                        <tr key={i} style={{
+                          borderTop: `1px solid ${C.card2}`,
+                          opacity: leg ? 1 : 0.3,
+                        }}>
+                          <td style={{ padding: '8px 14px', color: leg ? C.blue : C.muted, fontWeight: 700 }}>#{i + 1}</td>
+                          <td style={{ padding: '8px 14px', fontWeight: leg ? 700 : 400 }}>{leg ? $(leg.price) : '—'}</td>
+                          <td style={{ padding: '8px 14px', color: C.muted }}>{leg ? `$${leg.margin}` : '$20'}</td>
+                          <td style={{ padding: '8px 14px', color: dp != null ? (dp > 0 ? C.green : dp < 0 ? C.red : C.muted) : C.muted }}>
+                            {dp != null ? `${dp > 0 ? '+' : ''}${dp.toFixed(3)}%` : '—'}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* RIGHT: Agent Orchestration */}
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div style={{ ...lbl, marginBottom: 12 }}>Orquestación de Agentes</div>
+
+            {/* Agent 1 */}
+            {dca.agent1 ? (
+              <AgentCard agentNum={1} title="Detector de Niveles"
+                badge={`${dca.agent1.supportTimeframe ?? '?'} / ${dca.agent1.resistanceTimeframe ?? '?'}`} badgeColor={C.purple}
+                status="complete" ts={dca.agent1.detectedAt}
+                reasoning={dca.agent1.reasoning}
+                expanded={expanded['a1']} onToggle={() => toggleExpand('a1')} accent={C.purple}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+                  <div style={{ ...mini, borderLeft: `3px solid ${C.red}` }}>
+                    <div style={{ fontSize: 10, color: C.red, marginBottom: 2 }}>▲ Resistencia [{dca.agent1.resistanceTimeframe}]</div>
+                    <div style={{ fontWeight: 700, color: C.red }}>{$(dca.agent1.resistancePrice)}</div>
+                  </div>
+                  <div style={{ ...mini, borderLeft: `3px solid ${C.green}` }}>
+                    <div style={{ fontSize: 10, color: C.green, marginBottom: 2 }}>▼ Soporte [{dca.agent1.supportTimeframe}]</div>
+                    <div style={{ fontWeight: 700, color: C.green }}>{$(dca.agent1.supportPrice)}</div>
+                  </div>
+                  {dca.agent1.priceAtDetection && (
+                    <div style={mini}>
+                      <div style={{ fontSize: 10, color: C.muted, marginBottom: 2 }}>BTC al detectar</div>
+                      <div style={{ fontWeight: 700 }}>{$(dca.agent1.priceAtDetection)}</div>
+                    </div>
+                  )}
+                </div>
+              </AgentCard>
+            ) : (
+              <AgentCard agentNum={1} title="Detector de Niveles"
+                badge="15m → 1H → 4H" badgeColor={C.border}
+                status={svc.running ? 'waiting' : 'idle'} ts={svc.lastAgent1} accent={C.purple}>
+                <div style={{ fontSize: 11, color: C.muted }}>
+                  {svc.lastAgent1
+                    ? `Última ejecución: ${ago(svc.lastAgent1)} — corriendo cada 15m cuando IDLE`
+                    : 'Primera ejecución pendiente en el próximo ciclo 15m'}
+                </div>
+              </AgentCard>
+            )}
+
+            {/* Connector 1→2 */}
+            <div style={{ textAlign: 'center', color: dca.agent2 ? C.green : C.border, fontSize: 14, marginBottom: 4 }}>
+              {dca.agent2 ? '↓ precio llegó al nivel' : '↓ espera nivel'}
+            </div>
+
+            {/* Agent 2 */}
+            {dca.agent2 ? (
+              <AgentCard agentNum={2} title="Confirmador de Entrada"
+                badge={dca.agent2.direction} badgeColor={dca.agent2.direction === 'LONG' ? C.green : C.red}
+                status="complete" ts={dca.agent2.decidedAt}
+                reasoning={dca.agent2.reasoning}
+                expanded={expanded['a2']} onToggle={() => toggleExpand('a2')}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+                  <div style={mini}>
+                    <div style={{ fontSize: 10, color: C.muted, marginBottom: 2 }}>Dirección</div>
+                    <div style={{ fontWeight: 700, color: dca.agent2.direction === 'LONG' ? C.green : C.red }}>
+                      {dca.agent2.direction === 'LONG' ? '⬆ LONG' : '⬇ SHORT'}
+                    </div>
+                  </div>
+                  {dca.agent2.tpPrice && (
+                    <div style={mini}>
+                      <div style={{ fontSize: 10, color: C.muted, marginBottom: 2 }}>TP inicial</div>
+                      <div style={{ fontWeight: 700, color: C.green }}>{$(dca.agent2.tpPrice)}</div>
+                    </div>
+                  )}
+                  {dca.agent2.priceAtDecision && (
+                    <div style={mini}>
+                      <div style={{ fontSize: 10, color: C.muted, marginBottom: 2 }}>BTC al entrar</div>
+                      <div style={{ fontWeight: 700 }}>{$(dca.agent2.priceAtDecision)}</div>
+                    </div>
+                  )}
+                </div>
+              </AgentCard>
+            ) : (
+              <AgentCard agentNum={2} title="Confirmador de Entrada"
+                badge="5m + 15m" badgeColor={C.border}
+                status={dca.levelPrice ? 'waiting' : 'idle'}>
+                <div style={{ fontSize: 11, color: C.muted }}>
+                  {dca.levelPrice
+                    ? `Activo cuando BTC llegue a ${$(dca.levelPrice)} ±${((dca.levelPrice ?? 0) * 0.0015).toFixed(0)}`
+                    : 'Espera que Agente 1 defina un nivel'}
+                </div>
+              </AgentCard>
+            )}
+
+            {/* Agent 3 calls */}
+            {(dca.agent3Calls ?? []).map((ag3, i) => (
+              <React.Fragment key={i}>
+                <div style={{ textAlign: 'center', color: C.orange, fontSize: 14, marginBottom: 4 }}>
+                  ↓ −{DCA_TRIGGER_PCT_UI}% desde pierna {i + 1}
+                </div>
+                <AgentCard agentNum={`3.${i + 1}`} title={`Evaluador DCA — pierna ${i + 2}`}
+                  badge="4H" badgeColor={C.orange}
+                  status="complete" ts={ag3.calledAt}
+                  reasoning={ag3.reasoning}
+                  expanded={expanded[`a3-${i}`]} onToggle={() => toggleExpand(`a3-${i}`)} accent={C.orange}>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+                    <div style={mini}>
+                      <div style={{ fontSize: 10, color: C.muted, marginBottom: 2 }}>DCA nivel</div>
+                      <div style={{ fontWeight: 700, color: C.orange }}>{$(ag3.dcaPrice)}</div>
+                    </div>
+                    {ag3.slPrice && (
+                      <div style={mini}>
+                        <div style={{ fontSize: 10, color: C.muted, marginBottom: 2 }}>SL en 4H</div>
+                        <div style={{ fontWeight: 700, color: C.red }}>{$(ag3.slPrice)}</div>
+                      </div>
+                    )}
+                  </div>
+                </AgentCard>
+              </React.Fragment>
+            ))}
+
+            {/* Pending Agent 3 placeholder */}
+            {isOpen && legs.length < DCA_MAX_LEGS && (dca.agent3Calls?.length ?? 0) === 0 && (
+              <>
+                <div style={{ textAlign: 'center', color: C.border, fontSize: 14, marginBottom: 4 }}>
+                  ↓ −{DCA_TRIGGER_PCT_UI}% desde última entrada
+                </div>
+                <AgentCard agentNum={3} title="Evaluador DCA"
+                  badge="4H" badgeColor={C.orange}
+                  status="waiting" accent={C.orange}>
+                  <div style={{ fontSize: 11, color: C.muted }}>
+                    {nextDcaTrigger
+                      ? `Se activa si BTC llega a ${$(nextDcaTrigger)}`
+                      : 'Esperando apertura de posición'}
+                  </div>
+                </AgentCard>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* ── FOOTER ── */}
+        <div style={{ fontSize: 10, color: '#1e3a5f', textAlign: 'center', marginTop: 20, paddingBottom: 20 }}>
+          DCA 3-Agent System · Claude Sonnet · Actualiza cada 10s · {lastRefresh && lastRefresh.toLocaleTimeString()}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DCA Stats Dashboard
+// ═══════════════════════════════════════════════════════════════════════════
+const DCA_STRATEGIES = [
+  { id: 'dca_auto', name: 'DCA Auto',    color: '#60a5fa' },
+  { id: 'semi_1',   name: 'Semi-Auto 1', color: '#22c55e' },
+  { id: 'semi_2',   name: 'Semi-Auto 2', color: '#fbbf24' },
+  { id: 'semi_3',   name: 'Semi-Auto 3', color: '#a78bfa' },
+  { id: 'semi_4',   name: 'Semi-Auto 4', color: '#2dd4bf' },
+  { id: 'manual',   name: 'Manual',      color: '#fb923c' },
+]
+
+const EMPTY_FORM = () => ({ trade_date: new Date().toISOString().slice(0,16), direction: 'LONG', pnl_pct: '', pnl_usd_input: '', result: 'TP', notes: '', strategy: 'dca_auto' })
+
+function DCAStatsView() {
+  const C = C_LIVE
+  const [data, setData]         = useState(null)
+  const [loading, setLoading]   = useState(true)
+  const [modal, setModal]       = useState(null)   // null | { mode:'add'|'edit', id?, form }
+  const [submitting, setSub]    = useState(false)
+  const [editCap, setEditCap]   = useState(false)
+  const [capVal, setCapVal]     = useState('')
+  const [savingCap, setSavingCap]       = useState(false)
+  const [activeStrat, setActiveStrat]   = useState('__all__')
+  const [stratNames, setStratNames]     = useState(() => {
+    try { return JSON.parse(localStorage.getItem('dca_strat_names') ?? 'null') ?? DCA_STRATEGIES }
+    catch { return DCA_STRATEGIES }
+  })
+  const [editingStrat, setEditingStrat] = useState(null) // { id, val }
+
+  const saveStratName = (id, val) => {
+    const updated = stratNames.map(s => s.id === id ? { ...s, name: val.trim() || s.name } : s)
+    setStratNames(updated)
+    localStorage.setItem('dca_strat_names', JSON.stringify(updated))
+    setEditingStrat(null)
+  }
+
+  const analytics = useMemo(() => {
+    const all = data?.trades ?? []
+    const tradeList = (activeStrat === '__all__' ? all : all.filter(t => t.strategy === activeStrat))
+      .filter(t => t.pnl_usd != null)
+    if (!tradeList.length) return null
+    const sorted = [...tradeList].sort((a, b) => new Date(a.trade_date) - new Date(b.trade_date))
+    let cum = 0
+    const equity = sorted.map(t => ({ cum: +(cum += t.pnl_usd).toFixed(4), result: t.result, pnl: t.pnl_usd }))
+    let peak = 0, maxDD = 0, maxDDPct = 0
+    for (const p of equity) {
+      if (p.cum > peak) peak = p.cum
+      if (peak > 0) { const d = peak - p.cum; const dp = d / peak * 100; if (dp > maxDDPct) { maxDD = +d.toFixed(4); maxDDPct = +dp.toFixed(2) } }
+    }
+    const wins   = sorted.filter(t => t.pnl_usd > 0)
+    const losses = sorted.filter(t => t.pnl_usd < 0)
+    const gW     = wins.reduce((s, t) => s + t.pnl_usd, 0)
+    const gL     = Math.abs(losses.reduce((s, t) => s + t.pnl_usd, 0))
+    const pf     = gL > 0 ? +(gW / gL).toFixed(2) : null
+    const avgW   = wins.length   ? +(gW   / wins.length).toFixed(3)   : null
+    const avgL   = losses.length ? +(-gL  / losses.length).toFixed(3) : null
+    const exp    = sorted.length ? +(equity.at(-1).cum / sorted.length).toFixed(3) : null
+    let streak = 0, sType = null
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      const r = sorted[i].result
+      if (sType === null) { sType = r; streak = 1 } else if (r === sType) streak++; else break
+    }
+    return { equity, maxDD, maxDDPct, pf, avgW, avgL, exp, streak, sType,
+      wins: wins.length, losses: losses.length,
+      winRate: sorted.length ? +(wins.length / sorted.length * 100).toFixed(1) : 0,
+      totalPnl: equity.length ? equity.at(-1).cum : 0 }
+  }, [data, activeStrat])
+
+  const strategyStats = useMemo(() => {
+    const all = data?.trades ?? []
+    return stratNames.map(s => {
+      const st = all.filter(t => t.strategy === s.id && t.pnl_usd != null)
+      if (!st.length) return { ...s, count: 0, wins: 0, losses: 0, winRate: 0, totalPnl: 0, exp: 0 }
+      const ws  = st.filter(t => t.pnl_usd > 0)
+      const pnl = +st.reduce((a, t) => a + t.pnl_usd, 0).toFixed(2)
+      return { ...s, count: st.length, wins: ws.length, losses: st.length - ws.length,
+        winRate: +(ws.length / st.length * 100).toFixed(1),
+        totalPnl: pnl, exp: +(pnl / st.length).toFixed(3) }
+    })
+  }, [data, stratNames])
+
+  // % Cuenta por trade usando capital corrido (todas las estrategias, orden cronológico)
+  const runningPctMap = useMemo(() => {
+    const tc = data?.totalCapital ?? 0
+    const ts = data?.trades ?? []
+    if (!tc || !ts.length) return {}
+    const sorted = [...ts].filter(t => t.pnl_usd != null)
+      .sort((a, b) => new Date(a.trade_date) - new Date(b.trade_date))
+    let cap = tc
+    const map = {}
+    for (const t of sorted) {
+      map[t.id] = cap > 0 ? +(t.pnl_usd / cap * 100).toFixed(3) : null
+      cap += t.pnl_usd
+    }
+    return map
+  }, [data])
+
+  const fetchData = () =>
+    fetch('http://localhost:3001/api/stats').then(r => r.json())
+      .then(d => { setData(d); setLoading(false); setCapVal(String(d.totalCapital ?? '')) })
+      .catch(() => setLoading(false))
+
+  useEffect(() => { fetchData(); const t = setInterval(fetchData, 30_000); return () => clearInterval(t) }, [])
+
+  const $   = p => p != null ? `$${Number(p).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'
+  const fmtD = iso => iso ? new Date(iso).toLocaleString('es-CO', { timeZone: 'America/Bogota', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '—'
+  const fmtP = v => v == null ? '—' : `${v >= 0 ? '+' : ''}${Number(v).toFixed(3)}%`
+
+  const card   = { background: C.card, borderRadius: 10, padding: '16px 20px', marginBottom: 14 }
+  const lbl    = { fontSize: 10, color: C.muted, marginBottom: 3, textTransform: 'uppercase', letterSpacing: 1 }
+  const inp    = { background: C.card2, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, padding: '6px 10px', fontSize: 13, fontFamily: 'monospace', width: '100%', boxSizing: 'border-box' }
+  const btnPri = (dis) => ({ background: dis ? C.border : C.blue, color: '#fff', border: 'none', borderRadius: 5, padding: '7px 20px', fontSize: 12, cursor: dis ? 'default' : 'pointer', fontFamily: 'monospace' })
+
+  const saveCapital = () => {
+    setSavingCap(true)
+    fetch('http://localhost:3001/api/stats/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ total_capital: +capVal }) })
+      .then(() => { setSavingCap(false); setEditCap(false); fetchData() })
+      .catch(() => setSavingCap(false))
+  }
+
+  const openAdd  = () => setModal({ mode: 'add',  form: EMPTY_FORM() })
+  const openEdit = t  => {
+    const pnlUsdPrefill = t.capital_used != null && t.pnl_pct != null
+      ? +(+t.capital_used * +t.pnl_pct / 100).toFixed(4) : ''
+    setModal({ mode: 'edit', id: t.id, form: { trade_date: t.trade_date?.slice(0,16) ?? new Date().toISOString().slice(0,16), direction: t.direction ?? 'LONG', pnl_pct: t.pnl_pct ?? '', pnl_usd_input: pnlUsdPrefill, result: t.result ?? 'TP', notes: t.notes ?? '', strategy: t.strategy ?? 'dca_auto' } })
+  }
+
+  const submitModal = () => {
+    const { mode, id, form } = modal
+    const pnlPct  = parseFloat(form.pnl_pct)   || null
+    const pnlUsd  = parseFloat(form.pnl_usd_input) || null
+    const capital = pnlPct && pnlUsd ? +(pnlUsd / (pnlPct / 100)).toFixed(2) : null
+    setSub(true)
+    const { pnl_usd_input, ...rest } = form
+    const body = { ...rest, pnl_pct: pnlPct, capital_used: capital }
+    const url  = mode === 'add' ? 'http://localhost:3001/api/stats/trade' : `http://localhost:3001/api/stats/trade/${id}`
+    fetch(url, { method: mode === 'add' ? 'POST' : 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(() => { setSub(false); setModal(null); fetchData() })
+      .catch(() => setSub(false))
+  }
+
+  const deleteTrade = id => {
+    if (!window.confirm('¿Eliminar esta operación del diario?')) return
+    fetch(`http://localhost:3001/api/stats/trade/${id}`, { method: 'DELETE' }).then(fetchData)
+  }
+
+  const navBtns = (
+    <div className="strategy-nav">
+      <button className="strategy-tab" onClick={() => { window.location.href = '/' }}>📐 Rango + Resistencias</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=sar' }}>📈 SAR</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend' }}>📊 Supertrend</button>
+          <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=supertrend-dca' }}>📊 ST + DCA</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=confluence' }}>🎯 Confluencia</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=emapullback' }}>📉 EMA Pullback</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=pinbar' }}>🕯️ Pin Bar</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=soporte' }}>📗 Rango + Soporte</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=ema' }}>📡 EMA Touch</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=rangehigh' }}>🏔️ Rango Alto</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=scalping5m' }}>⚡ Scalping 5m</button>
+      <button className="strategy-tab" onClick={() => { window.location.href = '?strategy=live' }}>🤖 DCA Live</button>
+      <button className="strategy-tab active">📊 DCA Stats</button>
+    </div>
+  )
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#aaa', background: C.bg, minHeight: '100vh', fontFamily: 'monospace' }}>{navBtns}<p style={{ marginTop: 40 }}>Cargando…</p></div>
+
+  const { totalCapital = 0, summary = {}, trades = [] } = data ?? {}
+  const pnlCol = v => v == null ? C.muted : v >= 0 ? C.green : C.red
+
+  return (
+    <div style={{ minHeight: '100vh', background: C.bg, color: C.text, fontFamily: 'monospace' }}>
+
+      {/* Modal overlay */}
+      {modal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={e => { if (e.target === e.currentTarget) setModal(null) }}>
+          <div style={{ background: C.card, borderRadius: 12, padding: '24px 28px', width: 420, border: `1px solid ${C.border}` }}>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 18, color: C.text }}>
+              {modal.mode === 'add' ? '+ Nueva operación' : '✏ Editar operación'}
+            </div>
+            {[
+              { lbl: 'Fecha', key: 'trade_date', type: 'datetime-local' },
+              { lbl: 'P&L % (sobre el capital, ya con leverage)', key: 'pnl_pct', type: 'number', placeholder: 'ej. 4.5 o -6.0' },
+              { lbl: 'P&L en USDC (lo que recibiste en Binance)', key: 'pnl_usd_input', type: 'number', placeholder: 'ej. 0.90' },
+              { lbl: 'Notas (opcional)', key: 'notes', type: 'text', placeholder: 'ej. Pierna 1, tocó soporte en 15m' },
+            ].map(({ lbl: l, key, type, placeholder }) => (
+              <div key={key} style={{ marginBottom: 12 }}>
+                <div style={lbl}>{l}</div>
+                <input type={type} placeholder={placeholder} style={inp} value={modal.form[key]}
+                  onChange={e => setModal(p => ({ ...p, form: { ...p.form, [key]: e.target.value } }))} />
+              </div>
+            ))}
+            {/* Capital calculado */}
+            {(() => {
+              const pct = parseFloat(modal.form.pnl_pct)
+              const usd = parseFloat(modal.form.pnl_usd_input)
+              if (!pct || !usd) return null
+              const cap = (usd / (pct / 100)).toFixed(2)
+              return (
+                <div style={{ background: C.card2, borderRadius: 6, padding: '8px 12px', marginBottom: 12, fontSize: 12 }}>
+                  Capital en operación: <b style={{ color: C.blue }}>${cap}</b>
+                  <span style={{ color: C.muted, marginLeft: 8, fontSize: 11 }}>= {usd} ÷ ({pct}% / 100)</span>
+                </div>
+              )
+            })()}
+            {/* Strategy selector */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={lbl}>Estrategia</div>
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                {stratNames.map(s => (
+                  <button key={s.id}
+                    onClick={() => setModal(p => ({ ...p, form: { ...p.form, strategy: s.id } }))}
+                    style={{ padding: '5px 10px', borderRadius: 5, fontSize: 11, fontFamily: 'monospace', cursor: 'pointer', fontWeight: modal.form.strategy === s.id ? 700 : 400,
+                      border: `1px solid ${modal.form.strategy === s.id ? s.color : C.border}`,
+                      background: modal.form.strategy === s.id ? s.color + '22' : 'transparent',
+                      color: modal.form.strategy === s.id ? s.color : C.muted }}>
+                    {s.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+              <div style={{ flex: 1 }}>
+                <div style={lbl}>Dirección</div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {['LONG', 'SHORT'].map(d => (
+                    <button key={d} onClick={() => setModal(p => ({ ...p, form: { ...p.form, direction: d } }))}
+                      style={{ flex: 1, padding: '6px 0', borderRadius: 5, border: `1px solid ${modal.form.direction === d ? (d === 'LONG' ? C.green : C.red) : C.border}`, background: modal.form.direction === d ? (d === 'LONG' ? '#0a2318' : '#2d0a0a') : 'transparent', color: modal.form.direction === d ? (d === 'LONG' ? C.green : C.red) : C.muted, fontFamily: 'monospace', fontSize: 12, cursor: 'pointer', fontWeight: 700 }}>
+                      {d === 'LONG' ? '⬆ LONG' : '⬇ SHORT'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={lbl}>Resultado</div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {['TP', 'SL'].map(r => (
+                    <button key={r} onClick={() => setModal(p => ({ ...p, form: { ...p.form, result: r } }))}
+                      style={{ flex: 1, padding: '6px 0', borderRadius: 5, border: `1px solid ${modal.form.result === r ? (r === 'TP' ? C.green : C.red) : C.border}`, background: modal.form.result === r ? (r === 'TP' ? '#0a2318' : '#2d0a0a') : 'transparent', color: modal.form.result === r ? (r === 'TP' ? C.green : C.red) : C.muted, fontFamily: 'monospace', fontSize: 12, cursor: 'pointer', fontWeight: 700 }}>
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setModal(null)} style={{ ...btnPri(false), background: 'transparent', border: `1px solid ${C.border}`, color: C.muted }}>Cancelar</button>
+              <button onClick={submitModal} disabled={submitting} style={btnPri(submitting)}>{submitting ? 'Guardando…' : 'Guardar'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Header */}
+      <div style={{ padding: '10px 20px', background: '#080f1e', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 15, fontWeight: 700, color: C.blue }}>DCA STATS</span>
+        <span style={{ color: C.border }}>|</span>
+        {editCap ? (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input type="number" value={capVal} onChange={e => setCapVal(e.target.value)}
+              style={{ ...inp, width: 100, padding: '3px 8px', fontSize: 12 }} />
+            <button onClick={saveCapital} disabled={savingCap} style={{ ...btnPri(savingCap), padding: '3px 12px', fontSize: 11 }}>{savingCap ? '…' : 'OK'}</button>
+            <button onClick={() => setEditCap(false)} style={{ ...btnPri(false), background: 'transparent', border: `1px solid ${C.border}`, color: C.muted, padding: '3px 10px', fontSize: 11 }}>✕</button>
+          </div>
+        ) : (
+          <span style={{ fontSize: 12, color: C.text, cursor: 'pointer' }} onClick={() => setEditCap(true)}>
+            Saldo: <b style={{ color: (summary.totalPnlUsd ?? 0) >= 0 ? C.green : C.red }}>
+              {$(totalCapital + (summary.totalPnlUsd ?? 0))}
+            </b>
+            <span style={{ fontSize: 10, color: C.muted, marginLeft: 6 }}>
+              base {$(totalCapital)} ✏
+            </span>
+          </span>
+        )}
+        <span style={{ color: C.border }}>|</span>
+        <span style={{ fontSize: 12, color: summary.totalPnlUsd >= 0 ? C.green : C.red, fontWeight: 700 }}>
+          P&L {$(summary.totalPnlUsd)} &nbsp;
+          <span style={{ fontSize: 11 }}>({summary.returnPct >= 0 ? '+' : ''}{summary.returnPct?.toFixed(2)}% cuenta)</span>
+        </span>
+        <span style={{ color: C.border }}>|</span>
+        <span style={{ fontSize: 12, color: C.muted }}>{summary.wins ?? 0}W / {summary.losses ?? 0}L &nbsp;·&nbsp; Win rate <b style={{ color: (summary.winRate ?? 0) >= 50 ? C.green : C.red }}>{summary.winRate ?? 0}%</b></span>
+      </div>
+
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '16px 16px' }}>
+        {navBtns}
+        <div style={{ marginTop: 14 }} />
+
+        {/* ── Strategy tabs ── */}
+        {(() => {
+          const tabBase = { padding: '6px 12px', borderRadius: 6, fontSize: 11, fontFamily: 'monospace', cursor: 'pointer', border: '1px solid', display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }
+          const allCount = trades.length
+          return (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+              <button onClick={() => setActiveStrat('__all__')}
+                style={{ ...tabBase, borderColor: activeStrat === '__all__' ? C.text : C.border,
+                  background: activeStrat === '__all__' ? C.card2 : 'transparent', color: activeStrat === '__all__' ? C.text : C.muted, fontWeight: activeStrat === '__all__' ? 700 : 400 }}>
+                Todas
+                {allCount > 0 && <span style={{ background: C.border, borderRadius: 10, padding: '0 5px', fontSize: 10 }}>{allCount}</span>}
+              </button>
+              {stratNames.map(s => {
+                const count = trades.filter(t => t.strategy === s.id).length
+                const active = activeStrat === s.id
+                return (
+                  <button key={s.id} onClick={() => setActiveStrat(s.id)}
+                    style={{ ...tabBase, borderColor: active ? s.color : C.border,
+                      background: active ? s.color + '18' : 'transparent', color: active ? s.color : C.muted, fontWeight: active ? 700 : 400 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: count > 0 ? s.color : C.border, flexShrink: 0 }} />
+                    {editingStrat?.id === s.id
+                      ? <input autoFocus value={editingStrat.val}
+                          onChange={e => setEditingStrat(p => ({ ...p, val: e.target.value }))}
+                          onBlur={() => saveStratName(s.id, editingStrat.val)}
+                          onKeyDown={e => { if (e.key === 'Enter') saveStratName(s.id, editingStrat.val); if (e.key === 'Escape') setEditingStrat(null) }}
+                          style={{ background: 'transparent', border: 'none', color: 'inherit', fontFamily: 'monospace', fontSize: 11, width: 90, outline: 'none', fontWeight: 700 }} />
+                      : <span onDoubleClick={e => { e.stopPropagation(); setEditingStrat({ id: s.id, val: s.name }) }}>{s.name}</span>
+                    }
+                    {count > 0 && <span style={{ background: active ? s.color + '33' : C.border, borderRadius: 10, padding: '0 5px', fontSize: 10 }}>{count}</span>}
+                  </button>
+                )
+              })}
+              <span style={{ fontSize: 10, color: C.muted, alignSelf: 'center', marginLeft: 4 }}>doble clic para renombrar</span>
+            </div>
+          )
+        })()}
+
+        {/* ── Strategy overview grid (Todas mode) ── */}
+        {activeStrat === '__all__' && strategyStats.some(s => s.count > 0) && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))', gap: 10, marginBottom: 16 }}>
+            {strategyStats.map(s => (
+              <div key={s.id} onClick={() => setActiveStrat(s.id)}
+                style={{ background: C.card, borderRadius: 8, padding: '12px 14px', cursor: 'pointer',
+                  borderLeft: `3px solid ${s.count > 0 ? s.color : C.border}`,
+                  opacity: s.count === 0 ? 0.45 : 1, transition: 'opacity 0.15s' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: s.color }}>{s.name}</span>
+                  <span style={{ fontSize: 10, color: C.muted }}>{s.count} op{s.count !== 1 ? 's' : ''}</span>
+                </div>
+                {s.count === 0 ? (
+                  <div style={{ fontSize: 11, color: C.muted }}>Sin operaciones</div>
+                ) : (<>
+                  <div style={{ fontSize: 11, color: C.muted, marginBottom: 2 }}>
+                    Win rate: <b style={{ color: s.winRate >= 50 ? C.green : C.red }}>{s.winRate}%</b>
+                    <span style={{ color: C.muted }}> ({s.wins}W/{s.losses}L)</span>
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: s.totalPnl >= 0 ? C.green : C.red, marginBottom: 2 }}>
+                    {s.totalPnl >= 0 ? '+' : ''}{s.totalPnl.toFixed(2)} USDC
+                  </div>
+                  <div style={{ fontSize: 10, color: C.muted }}>Exp: {s.exp >= 0 ? '+' : ''}{s.exp} /op</div>
+                </>)}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Capital setup card (visible when not configured) ── */}
+        {!totalCapital && (
+          <div style={{ background: '#0d1f38', border: `1px solid ${C.blue}`, borderRadius: 10, padding: '18px 22px', marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.blue, marginBottom: 6 }}>⚙ Configura tu capital inicial</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>
+              Ingresa el capital base con el que arrancas (ej. 100 USDC). El saldo actual se calculará automáticamente sumando las ganancias y pérdidas de cada operación.
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', maxWidth: 280 }}>
+              <input
+                type="number" placeholder="Ej. 100" value={capVal}
+                onChange={e => setCapVal(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && capVal && saveCapital()}
+                style={{ ...inp, fontSize: 15, padding: '8px 12px', flex: 1 }}
+              />
+              <button
+                onClick={saveCapital} disabled={!capVal || savingCap}
+                style={{ ...btnPri(!capVal || savingCap), padding: '8px 20px', fontSize: 13 }}>
+                {savingCap ? '…' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Analytics ── */}
+        {analytics && (
+          <div style={{ marginBottom: 16 }}>
+            {/* Equity curve card */}
+            <div style={{ ...card, padding: '14px 16px 10px', marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 11, color: C.muted, textTransform: 'uppercase', letterSpacing: 1 }}>
+                  Curva de Capital · P&amp;L acumulado (USDC)
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color: analytics.equity.at(-1).cum >= 0 ? C.green : C.red }}>
+                  {analytics.equity.at(-1).cum >= 0 ? '+' : ''}{analytics.equity.at(-1).cum.toFixed(2)} USDC
+                </span>
+              </div>
+              {/* Inline SVG chart — no extra dependencies */}
+              {(() => {
+                const pts = analytics.equity
+                const W = 700, H = 160, ML = 52, MR = 14, MT = 10, MB = 26
+                const cW = W - ML - MR, cH = H - MT - MB
+                const ys  = pts.map(p => p.cum)
+                const yMin = Math.min(0, ...ys), yMax = Math.max(0, ...ys)
+                const pad = Math.max((yMax - yMin) * 0.12, 0.01)
+                const lo = yMin - pad, hi = yMax + pad, ySpan = hi - lo
+                const sx = i => ML + (pts.length < 2 ? cW / 2 : i / (pts.length - 1) * cW)
+                const sy = v => MT + (1 - (v - lo) / ySpan) * cH
+                const z  = sy(0)
+                const lc = pts.at(-1).cum >= 0 ? C.green : C.red
+                const linePts = pts.map((p, i) => `${sx(i)},${sy(p.cum)}`).join(' ')
+                const fillD   = pts.length > 1
+                  ? `M${sx(0)},${z} ${pts.map((p, i) => `L${sx(i)},${sy(p.cum)}`).join(' ')} L${sx(pts.length - 1)},${z} Z`
+                  : ''
+                const yLabels = [lo + ySpan * 0.25, lo + ySpan * 0.5, lo + ySpan * 0.75]
+                return (
+                  <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
+                    {yLabels.map((v, i) => (
+                      <g key={i}>
+                        <line x1={ML} y1={sy(v)} x2={W - MR} y2={sy(v)} stroke={C.card2} strokeWidth={0.6} />
+                        <text x={ML - 5} y={sy(v) + 3.5} textAnchor="end" fontSize={8} fill={C.muted} fontFamily="monospace">
+                          {v >= 0 ? '+' : ''}{v.toFixed(2)}
+                        </text>
+                      </g>
+                    ))}
+                    <line x1={ML} y1={z} x2={W - MR} y2={z} stroke={C.border} strokeDasharray="4,3" strokeWidth={1} />
+                    <text x={ML - 5} y={z + 3.5} textAnchor="end" fontSize={8} fill={C.text} fontFamily="monospace">$0</text>
+                    {fillD && <path d={fillD} fill={lc} fillOpacity={0.10} />}
+                    {pts.length > 1 && <polyline points={linePts} fill="none" stroke={lc} strokeWidth={1.8} strokeLinejoin="round" />}
+                    {pts.map((p, i) => (
+                      <circle key={i} cx={sx(i)} cy={sy(p.cum)} r={3.5}
+                        fill={p.result === 'TP' ? C.green : C.red} stroke={C.bg} strokeWidth={1.2} />
+                    ))}
+                    {pts.map((_, i) => {
+                      const show = pts.length <= 8 || i === 0 || i === pts.length - 1 || i % Math.ceil(pts.length / 8) === 0
+                      return show ? (
+                        <text key={i} x={sx(i)} y={H - MB + 16} textAnchor="middle" fontSize={8} fill={C.muted} fontFamily="monospace">#{i + 1}</text>
+                      ) : null
+                    })}
+                  </svg>
+                )
+              })()}
+            </div>
+
+            {/* Metrics grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 4 }}>
+              {[
+                {
+                  label: 'Profit Factor',
+                  value: analytics.pf != null ? analytics.pf.toFixed(2) : '∞',
+                  color: analytics.pf == null || analytics.pf >= 1.5 ? C.green : analytics.pf >= 1 ? C.yellow : C.red,
+                  sub:   analytics.pf != null ? (analytics.pf >= 1.5 ? 'excelente' : analytics.pf >= 1 ? 'aceptable' : 'en pérdida') : 'sin pérdidas aún',
+                },
+                {
+                  label: 'Max Drawdown',
+                  value: analytics.maxDDPct > 0 ? `-${analytics.maxDDPct.toFixed(1)}%` : '0%',
+                  color: analytics.maxDDPct > 15 ? C.red : analytics.maxDDPct > 8 ? C.yellow : C.green,
+                  sub:   analytics.maxDD > 0 ? `-$${analytics.maxDD.toFixed(2)} caída desde pico` : 'sin drawdown',
+                },
+                {
+                  label: 'Ganancia prom.',
+                  value: analytics.avgW != null ? `+$${analytics.avgW.toFixed(3)}` : '—',
+                  color: C.green,
+                  sub:   'por trade ganador',
+                },
+                {
+                  label: 'Pérdida prom.',
+                  value: analytics.avgL != null ? `$${analytics.avgL.toFixed(3)}` : '—',
+                  color: C.red,
+                  sub:   'por trade perdedor',
+                },
+                {
+                  label: 'Expectancy',
+                  value: analytics.exp != null ? `${analytics.exp >= 0 ? '+' : ''}$${analytics.exp.toFixed(3)}` : '—',
+                  color: (analytics.exp ?? 0) >= 0 ? C.green : C.red,
+                  sub:   'esperado por trade',
+                },
+                {
+                  label: 'Racha actual',
+                  value: `${analytics.streak} ${analytics.sType === 'TP' ? '✓' : '✗'}`,
+                  color: analytics.sType === 'TP' ? C.green : C.red,
+                  sub:   analytics.sType === 'TP' ? 'wins consecutivos' : 'losses consecutivos',
+                },
+              ].map(({ label, value, color, sub }) => (
+                <div key={label} style={{ background: C.card, borderRadius: 8, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 5 }}>{label}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color, fontFamily: 'monospace' }}>{value}</div>
+                  {sub && <div style={{ fontSize: 10, color: C.muted, marginTop: 3 }}>{sub}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Table header */}
+        {(() => {
+          const filteredTrades = activeStrat === '__all__' ? trades : trades.filter(t => t.strategy === activeStrat)
+          const stratLabel = activeStrat === '__all__' ? 'todas las estrategias' : (stratNames.find(s => s.id === activeStrat)?.name ?? activeStrat)
+          return (<>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: C.muted, textTransform: 'uppercase', letterSpacing: 1 }}>
+                Diario · {stratLabel} ({filteredTrades.length})
+              </div>
+              <button onClick={openAdd} style={{ ...btnPri(false), background: '#0a2318', border: `1px solid ${C.green}`, color: C.green, padding: '5px 14px' }}>
+                + Nueva operación
+              </button>
+            </div>
+
+            {/* Trades table */}
+            <div style={{ background: C.card, borderRadius: 10, overflow: 'hidden' }}>
+              {filteredTrades.length === 0 ? (
+                <div style={{ padding: 32, textAlign: 'center', color: C.muted, fontSize: 12 }}>
+                  {trades.length === 0
+                    ? 'No hay operaciones aún — agrega una manualmente o el sistema las registrará automáticamente al cerrar TP/SL'
+                    : `No hay operaciones para "${stratLabel}" — cambia de pestaña o agrega una nueva`}
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: C.card2 }}>
+                        {['Fecha', 'Estrategia', 'Dir', 'Resultado', 'Capital', '% P&L', 'P&L USD', '% Cuenta', 'Notas', ''].map(h => (
+                          <th key={h} style={{ padding: '9px 12px', color: C.muted, fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredTrades.map((t, i) => {
+                        const isTP  = t.result === 'TP'
+                        const dirC  = t.direction === 'LONG' ? C.green : t.direction === 'SHORT' ? C.red : C.muted
+                        const pnlC  = pnlCol(t.pnl_usd)
+                        const pnlSign = t.pnl_usd != null ? (t.pnl_usd >= 0 ? '+' : '') : ''
+                        const strat = stratNames.find(s => s.id === t.strategy)
+                        return (
+                          <tr key={t.id} style={{ borderBottom: `1px solid ${C.card2}`, background: i % 2 === 0 ? 'transparent' : '#131f30' }}>
+                            <td style={{ padding: '8px 12px', color: C.muted, whiteSpace: 'nowrap' }}>{fmtD(t.trade_date)}</td>
+                            <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
+                              {strat
+                                ? <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, color: strat.color, border: `1px solid ${strat.color}44`, background: strat.color + '18' }}>{strat.name}</span>
+                                : <span style={{ color: C.muted, fontSize: 11 }}>—</span>}
+                            </td>
+                            <td style={{ padding: '8px 12px', color: dirC, fontWeight: 700 }}>{t.direction ?? '—'}</td>
+                            <td style={{ padding: '8px 12px' }}>
+                              <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700, background: isTP ? '#0a2318' : '#2d0a0a', color: isTP ? C.green : C.red }}>
+                                {t.result ?? '—'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '8px 12px', color: C.text }}>{t.capital_used != null ? `$${t.capital_used}` : '—'}</td>
+                            <td style={{ padding: '8px 12px', color: pnlCol(t.pnl_pct), fontWeight: 700 }}>
+                              {t.pnl_pct != null ? `${t.pnl_pct >= 0 ? '+' : ''}${Number(t.pnl_pct).toFixed(2)}%` : '—'}
+                            </td>
+                            <td style={{ padding: '8px 12px', color: pnlC, fontWeight: 700 }}>
+                              {t.pnl_usd != null ? `${pnlSign}$${Math.abs(t.pnl_usd).toFixed(2)}` : '—'}
+                            </td>
+                            <td style={{ padding: '8px 12px', color: pnlC, fontWeight: 700 }}>{fmtP(runningPctMap[t.id] ?? t.pnl_pct_account)}</td>
+                            <td style={{ padding: '8px 12px', color: C.muted, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.notes ?? ''}</td>
+                            <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
+                              <button onClick={() => openEdit(t)} style={{ background: 'transparent', border: `1px solid ${C.border}`, color: C.muted, borderRadius: 4, padding: '2px 8px', fontSize: 11, cursor: 'pointer', marginRight: 4 }}>✏</button>
+                              <button onClick={() => deleteTrade(t.id)} style={{ background: 'transparent', border: `1px solid #3d1010`, color: C.red, borderRadius: 4, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}>✕</button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>)
+        })()}
       </div>
     </div>
   )
 }
 
 export default function App() {
+  if (isStatsMode)                   return <DCAStatsView />
+  if (isLiveMode)                    return <LiveSignalsView />
   if (isEmaExcelOptimMode)          return <EmaExcelOptimView />
   if (isEmaOptimMode)               return <EmaOptimView />
   if (isSoporteOptimMode)      return <SoporteOptimView />
@@ -8374,16 +10572,19 @@ export default function App() {
   if (isSupertrendOptimMode)      return <SupertrendOptimView />
   if (isSupertrendExcelOptimMode) return <SupertrendExcelOptimView />
   if (isSarOptimMode)             return <SarOptimView />
+  if (isScalping5mOptimMode)      return <Scalping5mOptimView />
   if (isOptimMode)             return <OptimView />
   if (isMultiOptimMode)        return <MultiOptimView />
   if (isExcelOptimMode)        return <ExcelOptimView />
   if (isPortfolioMode)         return <RangoResistenciaPortfolioView />
   if (isEmaMode)               return <EmaView />
   if (isRangeHighMode)         return <RangeHighView />
+  if (isScalping5mMode)        return <Scalping5mView />
   if (isSoporteMode)           return <SoporteView />
   if (isPinBarMode)            return <PinBarView />
   if (isEmaPullbackMode)       return <EmaPullbackView />
   if (isSupertrendMode)        return <SupertrendView />
+  if (isSupertrendDCAMode)     return <SupertrendView dcaMode={true} />
   if (isSarMode)               return <SarView />
   if (isConfluenceMode)        return <ConfluenceView />
   return <AppMain />

@@ -1,0 +1,662 @@
+[
+  {
+    "ts": "2026-05-14T22:30:05.619Z",
+    "price": 81403.7,
+    "signal": "NO_SIGNAL",
+    "confidence": "low",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "ADX at 6.2 confirms an extremely choppy, trendless market with no directional edge. Price is mid-range between BB lower (81120) and BB upper (81757), sitting just above EMA9/21 with no clear S/R level being tested. Volume has collapsed significantly on recent candles (last several 5m bars under 30-100 contracts), and MACD histogram is negative while RSI is neutral — no clean setup qualifies.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80918.41,
+      "ema200_15": 80468.1,
+      "rsi14_15": 56.4,
+      "rsi7_5": 52.3,
+      "atrPct": "0.247",
+      "volRatio": "0.51"
+    }
+  },
+  {
+    "ts": "2026-05-14T22:15:05.639Z",
+    "price": 81401.4,
+    "signal": "NO_SIGNAL",
+    "confidence": "low",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "ADX is extremely low at 7 with +DI/−DI nearly equal (21.5/22), confirming a choppy, trendless environment. Price is consolidating tightly between ~81200–81470 on low and declining volume over the last 12+ candles, with no clear breakout or bounce from a meaningful level. MACD histogram is negative and EMAs are compressed — no edge present.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80900.7,
+      "ema200_15": 80458.98,
+      "rsi14_15": 58.7,
+      "rsi7_5": 54.6,
+      "atrPct": "0.258",
+      "volRatio": "1.33"
+    }
+  },
+  {
+    "ts": "2026-05-14T22:00:05.528Z",
+    "price": 81390.7,
+    "signal": "NO_SIGNAL",
+    "confidence": "low",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "ADX at 8.3 with -DI barely above +DI signals extremely weak trend with no directional conviction. Price is mid-range between BB bands (81115-81770), MACD histogram is negative but diminishing, and recent candles show drying volume (0.23x) with tight consolidation around 81380-81430. No clear breakout, bounce, or rejection setup at a meaningful level — market is chopping with insufficient edge.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80873.15,
+      "ema200_15": 80447.55,
+      "rsi14_15": 55.5,
+      "rsi7_5": 52.4,
+      "atrPct": "0.265",
+      "volRatio": "0.23"
+    }
+  },
+  {
+    "ts": "2026-05-14T21:45:05.521Z",
+    "price": 81451,
+    "signal": "NO_SIGNAL",
+    "confidence": "low",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "ADX is extremely low at 8.5 with +DI and -DI nearly equal (22 vs 22.7), indicating a choppy, trendless market. Price is mid-range between BB lower (81124) and upper (81801) with no clear key level nearby at current 81451. MACD histogram is negative (-65.36) while EMAs are bullishly stacked but volume is declining (Vol/SMA20 at 0.69x), providing no clear directional edge.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80856.01,
+      "ema200_15": 80439.24,
+      "rsi14_15": 57.9,
+      "rsi7_5": 66.3,
+      "atrPct": "0.273",
+      "volRatio": "0.69"
+    }
+  },
+  {
+    "ts": "2026-05-14T21:30:05.629Z",
+    "price": 81381,
+    "signal": "NO_SIGNAL",
+    "confidence": "low",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price is consolidating mid-range between BB mid (81481) and BB lower (81105) with ADX at 10.1 indicating no trend. EMAs are bullishly stacked on 15m but MACD histogram is negative (-76.64) and volume has dried up significantly in the last several candles (0.9 BTC on the last bar). No clear breakout, bounce, or rejection setup at a meaningful level — price is chopping between 81200-81450 with no edge.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80831.41,
+      "ema200_15": 80429.57,
+      "rsi14_15": 56.8,
+      "rsi7_5": 58.6,
+      "atrPct": "0.284",
+      "volRatio": "0.85"
+    }
+  },
+  {
+    "ts": "2026-05-14T21:15:05.548Z",
+    "price": 81292.8,
+    "signal": "NO_SIGNAL",
+    "confidence": "low",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Market is in a clear chop zone: ADX at 10.3 with +DI/−DI nearly equal (22.1/23.3) signals no trend, MACD histogram is negative and declining despite bullish EMA alignment, and volume is extremely thin (Vol/SMA20 at 0.34x) with the last candle showing zero volume. Price is mid-range between BB lower (81100) and BB mid (81481) with RSI neutral at 54/46 on 15m/5m — no meaningful level being tested and no momentum confirmation for any setup.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80805.48,
+      "ema200_15": 80420.11,
+      "rsi14_15": 54.4,
+      "rsi7_5": 45,
+      "atrPct": "0.289",
+      "volRatio": "0.34"
+    }
+  },
+  {
+    "ts": "2026-05-14T21:00:05.711Z",
+    "price": 81349.9,
+    "signal": "NO_SIGNAL",
+    "confidence": "low",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price is mid-range between BB lower (81136) and BB mid (81497), with ADX at 11.6 indicating very low trend strength and choppy conditions. The 15m MACD histogram is negative (-87.51) while EMAs are mixed, and the 5m RSI is near neutral (49.1) with volume at 0.70x — no clear directional momentum. No actionable breakout level, bounce off support, or rejection from resistance is present; the market is in a tight range chop with no meaningful edge.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80790.72,
+      "ema200_15": 80413.39,
+      "rsi14_15": 58.6,
+      "rsi7_5": 55,
+      "atrPct": "0.300",
+      "volRatio": "0.70"
+    }
+  },
+  {
+    "ts": "2026-05-14T20:45:05.626Z",
+    "price": 81145,
+    "signal": "SHORT",
+    "confidence": "medium",
+    "tpPct": 0.35,
+    "slPct": 0.3,
+    "reasoning": "Price is below all short-term EMAs (9=81354, 21=81244) on 15m, with 5m EMAs bearishly aligned (9<21<50) and RSI7 at 26.8 showing oversold but 5m trend is clearly down. Price rejected from ~81920 swing high and has broken below BB midline (81495) and is now pressing the BB lower (81122) near current price of 81145 — bearish momentum with MACD deeply negative (hist=-110.96). Short entry at 81145 targeting ~80860 (EMA50 15m area, ~0.35%), SL at 81270 (recent candle high + ATR×0.3 = 81242+78=81320 cap at 81270 wick high, ~0.3%).",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80739.53,
+      "ema200_15": 80395.69,
+      "rsi14_15": 52.6,
+      "rsi7_5": 26.8,
+      "atrPct": "0.324",
+      "volRatio": "1.32"
+    }
+  },
+  {
+    "ts": "2026-05-14T20:30:05.741Z",
+    "price": 81234,
+    "signal": "NO_SIGNAL",
+    "confidence": "low",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price is mid-range between BB lower (~81127) and BB mid (~81496), with ADX at 13.8 indicating a choppy, low-trend environment. EMAs are mixed (9 below 21 on 5m, weak alignment on 15m), MACD histogram is negative and fading, and 5m volume is only 0.49x average — no conviction in either direction. No clear breakout, bounce at a key level, or high-probability setup present.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80740.61,
+      "ema200_15": 80395.97,
+      "rsi14_15": 53.5,
+      "rsi7_5": 32.6,
+      "atrPct": "0.311",
+      "volRatio": "0.49"
+    }
+  },
+  {
+    "ts": "2026-05-14T20:15:05.611Z",
+    "price": 81308.2,
+    "signal": "NO_SIGNAL",
+    "confidence": "low",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price is mid-range between BB lower (81002) and BB mid (81469), consolidating in a tight band around 81308 with diminishing volume (Vol/SMA20 at 0.60x). ADX at 14.8 signals a choppy, non-trending environment with no clear directional edge, and 5m EMAs are tightly compressed (9=81420, 21=81460, 50=81321) showing indecision. No meaningful breakout, bounce, or rejection at a key level — current action is low-conviction compression with no qualifying setup.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80699.21,
+      "ema200_15": 80381.41,
+      "rsi14_15": 55.9,
+      "rsi7_5": 37.7,
+      "atrPct": "0.341",
+      "volRatio": "0.60"
+    }
+  },
+  {
+    "ts": "2026-05-14T20:00:05.598Z",
+    "price": 81407.3,
+    "signal": "NO_SIGNAL",
+    "confidence": "low",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price is consolidating mid-range between ~81300-81450 with low volume on recent 5m candles and ADX at 15.7 indicating no meaningful trend. The 15m MACD histogram is negative (-92.2) with the MACD line below signal, and the 5m EMA9 (81416) is below EMA21 (81463), suggesting mild bearish pressure but no clean breakdown level. No clear breakout, bounce, or rejection setup is present — price is drifting in a low-conviction chop zone between the BB mid (81474) and 15m EMA21 (81257).",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80703.03,
+      "ema200_15": 80382.38,
+      "rsi14_15": 58.9,
+      "rsi7_5": 46.3,
+      "atrPct": "0.322",
+      "volRatio": "1.25"
+    }
+  },
+  {
+    "ts": "2026-05-14T19:52:18.687Z",
+    "price": 81360.5,
+    "signal": "NO_SIGNAL",
+    "confidence": "low",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price is mid-range between BB mid (81450) and BB lower (80932), currently at 81360 with no clear level being tested. ADX is weak at 16.4 with -DI>+DI showing mild bearish bias, but MACD histogram is recovering and 5m RSI at 45 shows indecision. No clean breakout, bounce, or rejection setup at a meaningful level — market is in low-conviction chop.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80673.49,
+      "ema200_15": 80373.41,
+      "rsi14_15": 57.7,
+      "rsi7_5": 40.5,
+      "atrPct": "0.340",
+      "volRatio": "0.55"
+    }
+  },
+  {
+    "ts": "2026-05-14T19:45:05.486Z",
+    "price": 81399.9,
+    "signal": "NO_SIGNAL",
+    "confidence": "low",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price is mid-range between BB mid (81452) and lower (80936), with 5m EMAs bearishly ordered (9<21) and RSI weak at 46.5, but no clear level being tested. ADX at 16.4 indicates a choppy, low-momentum environment with no established trend. MACD histogram negative and volume declining (Vol/SMA 0.42x) — no clean breakout, breakdown, bounce, or rejection setup present.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80674.98,
+      "ema200_15": 80373.79,
+      "rsi14_15": 58.9,
+      "rsi7_5": 43.5,
+      "atrPct": "0.333",
+      "volRatio": "0.42"
+    }
+  },
+  {
+    "ts": "2026-05-14T19:30:05.556Z",
+    "price": 81400.1,
+    "signal": "NO_SIGNAL",
+    "confidence": "low",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price is mid-range between BB lower (80855) and upper (81992), with no clear breakout or bounce setup at a key level. 15m MACD histogram is negative (-87.63) suggesting weakening momentum, ADX at 17.3 indicates low trend strength, and 5m EMAs are bearishly aligned (9<21) with RSI7 at 36.2 showing short-term weakness. Volume is very thin on recent 5m candles (0.45x SMA20), and price is drifting near 81400 with no meaningful S/R confluence — no edge here.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80642.33,
+      "ema200_15": 80363.94,
+      "rsi14_15": 57.2,
+      "rsi7_5": 36.2,
+      "atrPct": "0.347",
+      "volRatio": "0.45"
+    }
+  },
+  {
+    "ts": "2026-05-14T19:15:05.591Z",
+    "price": 81579.7,
+    "signal": "NO_SIGNAL",
+    "confidence": "low",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price is consolidating mid-range between ~81400-81600 after a pullback from the ~82000 swing high, with no clear breakout or bounce setup at a key level. ADX at 16.9 indicates a weak, choppy trend; MACD histogram is negative (-60.38) showing fading momentum, and 5m volume is very low (0.34x SMA). No actionable setup at a meaningful S/R level with sufficient confirmation.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80621.61,
+      "ema200_15": 80357,
+      "rsi14_15": 62.4,
+      "rsi7_5": 49.6,
+      "atrPct": "0.345",
+      "volRatio": "0.34"
+    }
+  },
+  {
+    "ts": "2026-05-14T19:00:05.639Z",
+    "price": 81545.9,
+    "signal": "NO_SIGNAL",
+    "confidence": "low",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price is consolidating mid-range between ~81400-81550 after pulling back from the recent swing high of ~82008. ADX at 19.8 with -DI slightly above +DI suggests no clear trend, and 5m volume is weak at 0.57x SMA with RSI near neutral (50.8). No clean breakout, breakdown, or bounce setup at a key level — waiting for a decisive move above 82000 or below 81000 for a valid signal.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80587.76,
+      "ema200_15": 80347.04,
+      "rsi14_15": 64.3,
+      "rsi7_5": 47.1,
+      "atrPct": "0.355",
+      "volRatio": "0.57"
+    }
+  },
+  {
+    "ts": "2026-05-14T18:59:17.748Z",
+    "price": 81558.1,
+    "signal": "NO_SIGNAL",
+    "confidence": "low",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price is consolidating mid-range between 81392-81611 after a failed push to 81920 swing high. 15m MACD histogram is negative (-26.04) showing momentum fading, ADX at 22.1 with -DI>+DI indicating no clear directional edge. 5m volume is very low (0.48x SMA20) and price is sitting near EMA9/21 cluster — no clean breakout, bounce, or rejection setup with sufficient conviction.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80549.25,
+      "ema200_15": 80336.37,
+      "rsi14_15": 64.4,
+      "rsi7_5": 47.9,
+      "atrPct": "0.380",
+      "volRatio": "0.48"
+    }
+  },
+  {
+    "ts": "2026-05-14T18:45:05.475Z",
+    "price": 81489.4,
+    "signal": "NO_SIGNAL",
+    "confidence": "high",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price is mid-range between BB mid (81229) and upper (82342), with no clear breakout or bounce setup. 5m RSI at 48.6 and RSI7 at 39 show weakening momentum, and volume at 0.44x SMA is well below average — no conviction. ADX at 21.8 with -DI slightly above +DI and MACD histogram negative indicate indecision; the recent pullback from 81920 high lacks a defined support level to trade against.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80547.22,
+      "ema200_15": 80335.86,
+      "rsi14_15": 63.5,
+      "rsi7_5": 39,
+      "atrPct": "0.362",
+      "volRatio": "0.44"
+    }
+  },
+  {
+    "ts": "2026-05-14T18:30:05.631Z",
+    "price": 81824.2,
+    "signal": "NO_SIGNAL",
+    "confidence": "high",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price is at 81824 after a strong impulsive rally from ~79200, now trading near the 15m BB upper band (82479) but with RSI14 at 74.6 (overbought) and declining 5m volume (0.60x SMA). The last few 15m candles show wicks and indecision (81834→81687, then choppy 81427-81810 range) with no clean breakout above a tested resistance level — just a grind into resistance. No textbook bounce or breakout setup exists mid-range with exhaustion signals present; risk/reward is unfavorable for either direction.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80521.32,
+      "ema200_15": 80328.38,
+      "rsi14_15": 74.6,
+      "rsi7_5": 60.5,
+      "atrPct": "0.354",
+      "volRatio": "0.60"
+    }
+  },
+  {
+    "ts": "2026-05-14T18:24:33.614Z",
+    "price": 81880,
+    "signal": "NO_SIGNAL",
+    "confidence": "high",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price is at 81880, RSI14 on 15m is overbought at 75.3, and the last few candles show slowing momentum with low volume (295 vs prior 2000+ spike candles). The 15m BB upper band is at 82473 and price is already deep in the upper half, offering poor R:R for a long entry here. No clean breakout with conviction or fresh bounce setup — mid-extension with fading volume, ambiguous continuation vs reversal.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80470.59,
+      "ema200_15": 80314.53,
+      "rsi14_15": 75.3,
+      "rsi7_5": 66.9,
+      "atrPct": "0.378",
+      "volRatio": "0.47"
+    }
+  },
+  {
+    "ts": "2026-05-14T18:15:05.560Z",
+    "price": 81808.5,
+    "signal": "NO_SIGNAL",
+    "confidence": "high",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price is mid-range between EMA9 (81570) and BB upper (82462) after a strong run from 79200 to 82008 — no clean breakout or bounce setup at a textbook level. RSI14 at 74.4 is overbought on 15m with the last 5m candle showing near-zero volume (3.4), suggesting exhaustion/consolidation rather than continuation. No clear rejection or breakout level to anchor a trade; entering here is chasing with unfavorable risk/reward.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80467.79,
+      "ema200_15": 80313.81,
+      "rsi14_15": 74.4,
+      "rsi7_5": 63.4,
+      "atrPct": "0.363",
+      "volRatio": "0.60"
+    }
+  },
+  {
+    "ts": "2026-05-14T18:05:15.457Z",
+    "price": 81475.6,
+    "signal": "NO_SIGNAL",
+    "confidence": "high",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price is mid-range between BB mid (~80939) and BB upper (~82358) after a strong rally from ~79200, now consolidating around 81450-81650 with declining volume (Vol/SMA20=0.48x) and 5m RSI7 at 43.6 showing short-term momentum fading. No clear breakout above a defined resistance or bounce from a key support — price is drifting in a choppy zone with no textbook setup. Best to wait for either a clean retest of EMA9/21 cluster (~81440-81550) as support with confirmation, or a decisive break above 82000-82008 swing high.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80399.62,
+      "ema200_15": 80295.73,
+      "rsi14_15": 66.5,
+      "rsi7_5": 43.6,
+      "atrPct": "0.377",
+      "volRatio": "0.48"
+    }
+  },
+  {
+    "ts": "2026-05-14T18:00:05.537Z",
+    "price": 81708.3,
+    "signal": "NO_SIGNAL",
+    "confidence": "high",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price is mid-range between EMA9 (81474) and BB upper (82379) after a sharp move up from ~79200, now showing consolidation/mild pullback with the last candle having near-zero volume (18.8 then 0.2). RSI14 at 71.8 is overbought on 15m and momentum is stalling — no clean breakout above BB upper or support bounce setup. No textbook-perfect entry: price is churning between 81400-81760 without a decisive level break.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80405.79,
+      "ema200_15": 80297.3,
+      "rsi14_15": 71.8,
+      "rsi7_5": 62,
+      "atrPct": "0.359",
+      "volRatio": "0.00"
+    }
+  },
+  {
+    "ts": "2026-05-14T17:45:05.564Z",
+    "price": 81516.1,
+    "signal": "NO_SIGNAL",
+    "confidence": "high",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price is mid-range after a rejection from the 82008 high, now consolidating around 81516 with no clear breakout or bounce setup. The 5m RSI is neutral at 56 with extremely low volume (Vol/SMA20 0.01x) on the last candle, indicating no conviction. The setup is ambiguous — not at a key support bounce or resistance breakout — so NO_SIGNAL is the correct call.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80355.71,
+      "ema200_15": 80284.29,
+      "rsi14_15": 72,
+      "rsi7_5": 51,
+      "atrPct": "0.375",
+      "volRatio": "0.01"
+    }
+  },
+  {
+    "ts": "2026-05-14T17:30:05.549Z",
+    "price": 81400,
+    "signal": "NO_SIGNAL",
+    "confidence": "high",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price at 81400 is mid-range after a sharp rally from ~79200 to 82008, now pulling back. The last several 5m candles show a bearish rollover from 82008 high with declining momentum (5m RSI7=44.9, 5m EMAs bearishly aligned 9<21), but no clear breakdown below a defined support level yet. 15m RSI at 68.9 is elevated and MACD histogram shrinking context suggests exhaustion, but price is not at a textbook breakout/rejection level — waiting for cleaner structure.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80296.87,
+      "ema200_15": 80268.99,
+      "rsi14_15": 68.9,
+      "rsi7_5": 44.9,
+      "atrPct": "0.376",
+      "volRatio": "0.01"
+    }
+  },
+  {
+    "ts": "2026-05-14T17:15:05.704Z",
+    "price": 81890.4,
+    "signal": "NO_SIGNAL",
+    "confidence": "high",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price at 81890 is extended well above all EMAs with 15m RSI at 77.2 — overbought and near BB upper (82235). The last 15m candle shows extremely low volume (6.9 vs prior 2000+), suggesting momentum exhaustion rather than a clean breakout continuation. No textbook long setup exists at current extension, and no breakdown/rejection short setup has been confirmed yet.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80260.09,
+      "ema200_15": 80259.23,
+      "rsi14_15": 77.2,
+      "rsi7_5": 69.6,
+      "atrPct": "0.362",
+      "volRatio": "0.00"
+    }
+  },
+  {
+    "ts": "2026-05-14T17:00:05.611Z",
+    "price": 81847.6,
+    "signal": "NO_SIGNAL",
+    "confidence": "high",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "RSI14 at 84 on 15m and price trading near/above BB upper (82177) signals extreme overbought conditions with high mean-reversion risk. The last candle shows near-zero volume (0.1 BTC) suggesting a stall/exhaustion at 81847 rather than a clean breakout continuation. No textbook long entry with favorable R:R exists at these extended levels, and a short setup lacks a confirmed rejection candle with clear resistance — setup is ambiguous mid-extension.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80208.49,
+      "ema200_15": 80246.23,
+      "rsi14_15": 84,
+      "rsi7_5": 72,
+      "atrPct": "0.358",
+      "volRatio": "0.01"
+    }
+  },
+  {
+    "ts": "2026-05-14T16:45:05.487Z",
+    "price": 81465.4,
+    "signal": "NO_SIGNAL",
+    "confidence": "high",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "RSI14 on 15m is at 81.2 — deeply overbought — while price is already near the upper BB (81955) with the last candle showing only 10.1 vol, suggesting momentum is exhausting. Price has rallied ~2100 points from the 79180 low in a near-vertical move; entering long here chases an overextended move with poor R:R. No clean rejection short setup exists yet as price hasn't tagged a confirmed resistance level with a bearish candle structure.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80128.05,
+      "ema200_15": 80225.73,
+      "rsi14_15": 81.2,
+      "rsi7_5": 69.1,
+      "atrPct": "0.312",
+      "volRatio": "0.03"
+    }
+  },
+  {
+    "ts": "2026-05-14T16:30:05.524Z",
+    "price": 81411.3,
+    "signal": "NO_SIGNAL",
+    "confidence": "high",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price is overbought on both 15m (RSI 83.4) and 5m (RSI 73.1) timeframes after a strong impulsive move from ~79200 to 81522. Current price at 81411 is near the 15m BB upper band (81866) with no clear breakout confirmation above a structural resistance level — the last 15m candle is tiny (6.3 vol) with no directional conviction. Vol/SMA20 at 0.02x on 5m signals extreme volume exhaustion, making any breakout or bounce entry here high-risk with no clean setup.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80076.27,
+      "ema200_15": 80213.16,
+      "rsi14_15": 83.4,
+      "rsi7_5": 70.9,
+      "atrPct": "0.311",
+      "volRatio": "0.02"
+    }
+  },
+  {
+    "ts": "2026-05-14T16:15:05.451Z",
+    "price": 81423.5,
+    "signal": "NO_SIGNAL",
+    "confidence": "high",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price is extended well above all EMAs with 15m RSI at 83.8 and 5m RSI at 78.9/85, indicating overbought conditions on both timeframes. The last 15m candle shows near-zero volume (0.7) suggesting the move is stalling just under BB upper at 81719.85, but there's no clean rejection yet to justify a SHORT entry. A LONG breakout above 81555 lacks volume confirmation (5m vol/SMA20 at 0.41x) making the setup ambiguous — insufficient quality for either direction.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 80018.02,
+      "ema200_15": 80199.31,
+      "rsi14_15": 83.8,
+      "rsi7_5": 85,
+      "atrPct": "0.316",
+      "volRatio": "0.41"
+    }
+  },
+  {
+    "ts": "2026-05-14T16:08:48.175Z",
+    "price": 81393,
+    "signal": "NO_SIGNAL",
+    "confidence": "high",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "Price at 81393 is already deep into overbought territory — 15m RSI 82.7, 5m RSI 78.4/84.2 — after a near-parabolic 2000+ point rally from ~79200. Price is pressing against the upper BB (81500) with extremely low volume (5m Vol/SMA20 0.28x), suggesting momentum exhaustion rather than a fresh breakout. No clean support bounce or confirmed breakout level exists here — entering long is chasing, and there is no clear rejection candle pattern for a short yet.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 79952.14,
+      "ema200_15": 80182.87,
+      "rsi14_15": 82.7,
+      "rsi7_5": 84.2,
+      "atrPct": "0.332",
+      "volRatio": "0.28"
+    }
+  },
+  {
+    "ts": "2026-05-14T16:00:05.536Z",
+    "price": 81292.6,
+    "signal": "NO_SIGNAL",
+    "confidence": "high",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "RSI14 on 15m is 81.3, severely overextended above the 70 threshold required for LONG entries — this alone disqualifies any long signal. Additionally, Vol/SMA20 is only 0.44x on the 5m, far below the required 1.2x spike. Price is pressing against the upper BB (81293.35) at current 81292.60, suggesting exhaustion rather than a clean breakout with confirming volume.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 79893.33,
+      "ema200_15": 80168.73,
+      "rsi14_15": 81.3,
+      "rsi7_5": 81,
+      "atrPct": "0.336",
+      "volRatio": "0.44"
+    }
+  },
+  {
+    "ts": "2026-05-14T15:58:14.500Z",
+    "price": 81292.6,
+    "signal": "NO_SIGNAL",
+    "confidence": "high",
+    "tpPct": null,
+    "slPct": null,
+    "reasoning": "RSI14 on 15m is 81.7, well above the 70 threshold required for a LONG entry, disqualifying any long setup. Volume/SMA20 is only 0.44x on 5m, far below the required 1.2x spike for confirmation. Price is pressing against the upper Bollinger Band (81304.5) with no clean breakout close above it, and overbought conditions across both timeframes make this a textbook NO_SIGNAL.",
+    "tpPrice": null,
+    "slPrice": null,
+    "sent": false,
+    "indicators": {
+      "ema50_15": 79895.11,
+      "ema200_15": 80169.18,
+      "rsi14_15": 81.7,
+      "rsi7_5": 81,
+      "atrPct": "0.336",
+      "volRatio": "0.44"
+    }
+  }
+]

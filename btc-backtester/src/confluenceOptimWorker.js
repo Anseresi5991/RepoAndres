@@ -1,12 +1,12 @@
 /**
- * Web Worker — Análisis Profundo Confluencia
+ * Web Worker — Análisis Profundo Confluencia (optimizado)
  *
  * Optimiza sobre: tpPct × slPct × confluencesRequired × rsiOverbought
- * Los indicadores (EMA, MACD, BB, VolMA) se pre-computan una sola vez.
- * El RSI también se pre-computa; solo varía el umbral de comparación.
  *
- * Entrada:  { candles, optimRanges, params }
- * Salida:   postMessage({ type: 'progress'|'done'|'error', ... })
+ * Optimizaciones vs versión anterior:
+ *  1. computeBB usa varianza rolling O(N) en vez de O(N×period)
+ *  2. Para cada par (rsiOb, conf) se pre-indexan los bares de señal;
+ *     el bucle (tp × sl) salta de señal en señal en vez de iterar N.
  */
 
 function computeEMA(values, period) {
@@ -69,20 +69,25 @@ function computeMACD(closes, fastP, slowP, signalP) {
   return { macdLine, signalLine }
 }
 
+// O(N) rolling variance — antes era O(N × period)
 function computeBB(closes, period, mult) {
   const N = closes.length
   const upper = new Float64Array(N).fill(NaN)
   const lower = new Float64Array(N).fill(NaN)
-  let sum = 0
+  let sum = 0, sumSq = 0
   for (let i = 0; i < N; i++) {
-    sum += closes[i]
-    if (i >= period) sum -= closes[i - period]
+    sum   += closes[i]
+    sumSq += closes[i] * closes[i]
+    if (i >= period) {
+      sum   -= closes[i - period]
+      sumSq -= closes[i - period] * closes[i - period]
+    }
     if (i >= period - 1) {
-      const sma = sum / period
-      let v = 0
-      for (let j = i - period + 1; j <= i; j++) v += (closes[j] - sma) ** 2
-      const sd = Math.sqrt(v / period)
-      upper[i] = sma + mult * sd; lower[i] = sma - mult * sd
+      const sma      = sum / period
+      const variance = sumSq / period - sma * sma
+      const sd       = Math.sqrt(variance > 0 ? variance : 0)
+      upper[i] = sma + mult * sd
+      lower[i] = sma - mult * sd
     }
   }
   return { upper, lower }
@@ -109,76 +114,6 @@ function rangeValues(min, max, step) {
   return vals
 }
 
-// Fast backtest usando condiciones pre-computadas
-function runFastBacktest(
-  N, closes, highs, lows,
-  longBase, shortBase, rsiArr, valid,
-  rsiOverbought, rsiOversold, confluencesRequired,
-  tpPct, slPct, effTp, effSl,
-  canLong, canShort
-) {
-  let inTrade = false, isLong = false
-  let tpPr = 0, slPr = 0
-  let totalTp = 0, totalSl = 0, totalClosed = 0
-  let profitPct = 0, lossPct = 0
-  let eqPct = 0, eqPeak = 0, maxDrawdown = 0
-  let compound = 1.0
-
-  for (let i = 1; i < N; i++) {
-    if (!valid[i]) continue
-    const close = closes[i], high = highs[i], low = lows[i]
-
-    let tpHit = false, slHit = false
-    if (inTrade) {
-      tpHit = isLong  ? high >= tpPr : low  <= tpPr
-      slHit = !tpHit && (isLong ? low  <= slPr : high >= slPr)
-    }
-
-    if (tpHit || slHit) {
-      const win = tpHit
-      if (win) { totalTp++; profitPct += effTp; eqPct += effTp }
-      else     { totalSl++; lossPct   += effSl; eqPct -= effSl }
-      totalClosed++
-      eqPeak      = Math.max(eqPeak, eqPct)
-      maxDrawdown = Math.max(maxDrawdown, eqPeak - eqPct)
-      compound    = win ? compound * (1 + effTp / 100) : compound * (1 - effSl / 100)
-      inTrade = false
-    }
-
-    if (!inTrade) {
-      const rsiLong  = rsiArr[i] < rsiOversold
-      const rsiShort = rsiArr[i] > rsiOverbought
-      const longScore  = longBase[i]  + (rsiLong  ? 1 : 0)
-      const shortScore = shortBase[i] + (rsiShort ? 1 : 0)
-
-      const longOk  = canLong  && longScore  >= confluencesRequired
-      const shortOk = canShort && shortScore >= confluencesRequired
-
-      let goLong = false, goShort = false
-      if      (longOk && !shortOk)                  goLong  = true
-      else if (shortOk && !longOk)                  goShort = true
-      else if (longOk && shortOk) {
-        if (longScore >= shortScore) goLong  = true
-        else                         goShort = true
-      }
-
-      if (goLong || goShort) {
-        inTrade = true; isLong = goLong
-        tpPr = isLong ? close * (1 + tpPct / 100) : close * (1 - tpPct / 100)
-        slPr = isLong ? close * (1 - slPct / 100) : close * (1 + slPct / 100)
-      }
-    }
-  }
-
-  const netPct  = profitPct - lossPct
-  const winRate = totalClosed > 0 ? (totalTp / totalClosed) * 100 : 0
-  const score   = totalClosed >= 5 && netPct > 0
-    ? netPct / Math.max(maxDrawdown, 0.1)
-    : -Infinity
-
-  return { totalTp, totalSl, totalClosed, netPct, winRate, maxDrawdown, compound, score }
-}
-
 // ── Entrada del Worker ──
 self.onmessage = function (e) {
   const { candles, optimRanges, params } = e.data
@@ -199,6 +134,9 @@ self.onmessage = function (e) {
       feeSlPct         = 0.10,
       leverage         = 1,
       tradeDirection   = 'both',
+      initialCapital   = 1000,
+      emaTrend         = 200,
+      skipSundays      = true,
     } = params
 
     const N = candles.length
@@ -214,18 +152,26 @@ self.onmessage = function (e) {
     }
 
     // Pre-computar indicadores (una sola vez)
-    const emaFastArr = computeEMA(closes, emaFast)
-    const emaSlowArr = computeEMA(closes, emaSlow)
-    const rsiArr     = computeRSI(closes, rsiPeriod)
+    const emaFastArr  = computeEMA(closes, emaFast)
+    const emaSlowArr  = computeEMA(closes, emaSlow)
+    const emaTrendArr = computeEMA(closes, emaTrend)
+    const rsiArr      = computeRSI(closes, rsiPeriod)
     const { macdLine, signalLine } = computeMACD(closes, macdFast, macdSlow, macdSignalPeriod)
     const { upper: bbUpper, lower: bbLower } = computeBB(closes, bbPeriod, bbStdDev)
-    const volMAArr   = computeSMA(volumes, volMAPeriod)
+    const volMAArr    = computeSMA(volumes, volMAPeriod)
 
-    // valid[i]: todos los indicadores están calculados
+    // Pre-computar domingos
+    const isSundayArr = new Uint8Array(N)
+    for (let i = 0; i < N; i++) {
+      isSundayArr[i] = new Date(candles[i].OpenTime).getUTCDay() === 0 ? 1 : 0
+    }
+
+    // valid[i]: todos los indicadores listos y no es domingo (si aplica)
     const valid = new Uint8Array(N)
     for (let i = 1; i < N; i++) {
+      if (skipSundays && isSundayArr[i]) continue
       if (
-        !isNaN(emaFastArr[i]) && !isNaN(emaSlowArr[i]) &&
+        !isNaN(emaFastArr[i]) && !isNaN(emaSlowArr[i]) && !isNaN(emaTrendArr[i]) &&
         !isNaN(rsiArr[i]) &&
         !isNaN(macdLine[i]) && !isNaN(signalLine[i]) &&
         !isNaN(bbUpper[i])  && !isNaN(bbLower[i]) &&
@@ -233,21 +179,27 @@ self.onmessage = function (e) {
       ) valid[i] = 1
     }
 
-    // Condiciones fijas por barra (sin RSI — varía con el umbral)
+    // Condiciones fijas por barra — RSI varía con el umbral, se añade en el loop
     const longBase  = new Uint8Array(N)
     const shortBase = new Uint8Array(N)
     for (let i = 1; i < N; i++) {
       if (!valid[i]) continue
-      const close   = closes[i]
-      const highVol = volumes[i] > volMAArr[i] * volMultiplier
-      longBase[i]  = (emaFastArr[i] > emaSlowArr[i] ? 1 : 0)
-                   + (macdLine[i]   > signalLine[i]  ? 1 : 0)
-                   + (highVol ? 1 : 0)
-                   + (close <= bbLower[i] ? 1 : 0)
-      shortBase[i] = (emaFastArr[i] < emaSlowArr[i] ? 1 : 0)
-                   + (macdLine[i]   < signalLine[i]  ? 1 : 0)
-                   + (highVol ? 1 : 0)
-                   + (close >= bbUpper[i] ? 1 : 0)
+      const close      = closes[i]
+      const highVol    = volumes[i] > volMAArr[i] * volMultiplier
+      const aboveTrend = close > emaTrendArr[i]
+      const belowTrend = close < emaTrendArr[i]
+      longBase[i]  = aboveTrend
+        ? (emaFastArr[i] > emaSlowArr[i] ? 1 : 0)
+        + (macdLine[i]   > signalLine[i]  ? 1 : 0)
+        + (highVol ? 1 : 0)
+        + (close <= bbLower[i] ? 1 : 0)
+        : 0
+      shortBase[i] = belowTrend
+        ? (emaFastArr[i] < emaSlowArr[i] ? 1 : 0)
+        + (macdLine[i]   < signalLine[i]  ? 1 : 0)
+        + (highVol ? 1 : 0)
+        + (close >= bbUpper[i] ? 1 : 0)
+        : 0
     }
 
     const canLong  = tradeDirection === 'both' || tradeDirection === 'long'
@@ -263,50 +215,117 @@ self.onmessage = function (e) {
 
     let done = 0
     let topResults = []
+    let lastReportedLength = 0
 
     for (const rsiOb of rsiObVals) {
       const rsiOs = 100 - rsiOb
+
       for (const conf of confVals) {
         const confluencesRequired = Math.round(conf)
+
+        // ── Pre-indexar bares de señal para este (rsiOb, conf) ──
+        // Coste: O(N) — una sola vez por par, compartido por todos (tp, sl)
+        const sigBarsTemp = []
+        const sigLongTemp = []
+        for (let i = 1; i < N; i++) {
+          if (!valid[i]) continue
+          const ls = longBase[i]  + (rsiArr[i] < rsiOs ? 1 : 0)
+          const ss = shortBase[i] + (rsiArr[i] > rsiOb ? 1 : 0)
+          const lo = canLong  && ls >= confluencesRequired
+          const so = canShort && ss >= confluencesRequired
+          if (lo || so) {
+            sigBarsTemp.push(i)
+            sigLongTemp.push((lo && (!so || ls >= ss)) ? 1 : 0)
+          }
+        }
+        const sigBars = new Uint32Array(sigBarsTemp)
+        const sigLong = new Uint8Array(sigLongTemp)
+        const nSig    = sigBars.length
+
+        // ── Bucle (tp × sl): simula saltando de señal en señal ──
         for (const tp of tpVals) {
           const effTp = Math.max(tp - feeTpPct, 0) * leverage
           for (const sl of slVals) {
             const effSl = (sl + feeSlPct) * leverage
 
-            const res = runFastBacktest(
-              N, closes, highs, lows,
-              longBase, shortBase, rsiArr, valid,
-              rsiOb, rsiOs, confluencesRequired,
-              tp, sl, effTp, effSl,
-              canLong, canShort
-            )
+            let sIdx     = 0
+            let inTrade  = false, isLong = false
+            let tpPr     = 0, slPr = 0
+            let totalTp  = 0, totalSl = 0
+            let profitPct = 0, lossPct = 0
+            let eqPct = 0, eqPeak = 0, maxDD = 0
+            let compound  = 1.0
 
-            if (res.score > -Infinity) {
+            for (let i = 1; i < N; i++) {
+              if (!valid[i]) continue
+
+              if (inTrade) {
+                const tpHit = isLong ? highs[i] >= tpPr : lows[i]  <= tpPr
+                const slHit = !tpHit && (isLong ? lows[i] <= slPr  : highs[i] >= slPr)
+                if (tpHit || slHit) {
+                  const win = tpHit
+                  if (win) { totalTp++; profitPct += effTp; eqPct += effTp }
+                  else     { totalSl++; lossPct   += effSl; eqPct -= effSl }
+                  eqPeak   = Math.max(eqPeak, eqPct)
+                  maxDD    = Math.max(maxDD, eqPeak - eqPct)
+                  compound = win ? compound * (1 + effTp / 100) : compound * (1 - effSl / 100)
+                  inTrade  = false
+                  // avanzar sIdx más allá de señales que ocurrieron durante el trade
+                  while (sIdx < nSig && sigBars[sIdx] < i) sIdx++
+                }
+              }
+
+              if (!inTrade) {
+                // Adelantar sIdx a la primera señal >= i
+                while (sIdx < nSig && sigBars[sIdx] < i) sIdx++
+                if (sIdx >= nSig) break
+                if (sigBars[sIdx] > i) {
+                  // Saltar directamente al bar de señal (evita iterar bares vacíos)
+                  i = sigBars[sIdx] - 1
+                  continue
+                }
+                // Señal exactamente en bar i
+                isLong  = sigLong[sIdx] === 1
+                sIdx++
+                tpPr    = isLong ? closes[i] * (1 + tp / 100) : closes[i] * (1 - tp / 100)
+                slPr    = isLong ? closes[i] * (1 - sl / 100) : closes[i] * (1 + sl / 100)
+                inTrade = true
+              }
+            }
+
+            const totalClosed = totalTp + totalSl
+            const netPct      = profitPct - lossPct
+            const winRate     = totalClosed > 0 ? (totalTp / totalClosed) * 100 : 0
+            const score       = totalClosed >= 5 && netPct > 0 && maxDD <= 50
+              ? netPct / Math.max(maxDD, 0.1)
+              : -Infinity
+
+            if (score > -Infinity) {
               topResults.push({
                 tpPct:               tp,
                 slPct:               sl,
                 confluencesRequired,
                 rsiOverbought:       rsiOb,
                 rsiOversold:         rsiOs,
-                totalTp:             res.totalTp,
-                totalSl:             res.totalSl,
-                totalClosed:         res.totalClosed,
-                totalNetPct:         res.netPct.toFixed(2),
-                winRate:             res.winRate.toFixed(2),
-                maxDrawdownPct:      res.maxDrawdown.toFixed(2),
-                compoundFactor:      res.compound.toFixed(4),
-                _score:              res.score,
+                totalTp,
+                totalSl,
+                totalClosed,
+                totalNetPct:         netPct.toFixed(2),
+                winRate:             winRate.toFixed(2),
+                maxDrawdownPct:      maxDD.toFixed(2),
+                compoundCapital:     (compound * initialCapital).toFixed(2),
+                _score:              score,
               })
-              if (topResults.length > 600) {
-                topResults.sort((a, b) => b._score - a._score)
-                topResults = topResults.slice(0, 400)
-              }
             }
 
             done++
             if (done % REPORT_EVERY === 0) {
-              const sorted = topResults.slice().sort((a, b) => b._score - a._score)
-              self.postMessage({ type: 'progress', done, total, topResults: sorted.slice(0, 400) })
+              if (topResults.length !== lastReportedLength) {
+                lastReportedLength = topResults.length
+                self.postMessage({ type: 'progress', done, total, topResults: topResults.slice() })
+              } else {
+                self.postMessage({ type: 'progress', done, total })
+              }
             }
           }
         }
@@ -314,7 +333,7 @@ self.onmessage = function (e) {
     }
 
     topResults.sort((a, b) => b._score - a._score)
-    self.postMessage({ type: 'done', results: topResults.slice(0, 400) })
+    self.postMessage({ type: 'done', results: topResults })
 
   } catch (err) {
     self.postMessage({ type: 'error', message: err.message })

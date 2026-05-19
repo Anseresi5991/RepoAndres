@@ -1,0 +1,374 @@
+//@version=5
+indicator("Niveles Manuales S/R — Long & Short", overlay=true, max_labels_count=500)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CONFIGURACIÓN GLOBAL
+// ═══════════════════════════════════════════════════════════════════════════
+grp_g    = "Configuración Global"
+min_wick = input.float(40.0, "Mecha mínima (%)", minval=0.0, step=5.0, group=grp_g, tooltip="% mínimo de mecha respecto al rango total de la vela")
+skip_sun = input.bool(true,  "Omitir domingos (UTC)", group=grp_g)
+show_lvl = input.bool(true,  "Mostrar líneas de nivel", group=grp_g)
+show_sig = input.bool(true,  "Mostrar marcas de señal", group=grp_g)
+show_trd = input.bool(true,  "Mostrar líneas Entrada/TP/SL", group=grp_g)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WEBHOOK
+// ═══════════════════════════════════════════════════════════════════════════
+grp_wh  = "Webhook"
+wh_acct = input.string("NIVELES_SR", "Account ID", group=grp_wh)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NIVELES SHORT (Resistencias) — TP y SL en precio absoluto
+// ═══════════════════════════════════════════════════════════════════════════
+grp_r   = "Niveles SHORT (Resistencias)"
+r1      = input.float(0.0, "Resistencia 1 (precio entrada)", group=grp_r, minval=0.0, step=100.0)
+r1_tp   = input.float(0.0, "TP R1 (precio)",                 group=grp_r, minval=0.0, step=100.0, tooltip="Precio objetivo para cerrar en ganancia")
+r1_sl   = input.float(0.0, "SL R1 (precio)",                 group=grp_r, minval=0.0, step=100.0, tooltip="Precio objetivo para cerrar en pérdida")
+r2      = input.float(0.0, "Resistencia 2 (precio entrada)", group=grp_r, minval=0.0, step=100.0)
+r2_tp   = input.float(0.0, "TP R2 (precio)",                 group=grp_r, minval=0.0, step=100.0)
+r2_sl   = input.float(0.0, "SL R2 (precio)",                 group=grp_r, minval=0.0, step=100.0)
+r3      = input.float(0.0, "Resistencia 3 (precio entrada)", group=grp_r, minval=0.0, step=100.0)
+r3_tp   = input.float(0.0, "TP R3 (precio)",                 group=grp_r, minval=0.0, step=100.0)
+r3_sl   = input.float(0.0, "SL R3 (precio)",                 group=grp_r, minval=0.0, step=100.0)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NIVELES LONG (Soportes) — TP y SL en precio absoluto
+// ═══════════════════════════════════════════════════════════════════════════
+grp_s   = "Niveles LONG (Soportes)"
+s1      = input.float(0.0, "Soporte 1 (precio entrada)", group=grp_s, minval=0.0, step=100.0)
+s1_tp   = input.float(0.0, "TP S1 (precio)",             group=grp_s, minval=0.0, step=100.0)
+s1_sl   = input.float(0.0, "SL S1 (precio)",             group=grp_s, minval=0.0, step=100.0)
+s2      = input.float(0.0, "Soporte 2 (precio entrada)", group=grp_s, minval=0.0, step=100.0)
+s2_tp   = input.float(0.0, "TP S2 (precio)",             group=grp_s, minval=0.0, step=100.0)
+s2_sl   = input.float(0.0, "SL S2 (precio)",             group=grp_s, minval=0.0, step=100.0)
+s3      = input.float(0.0, "Soporte 3 (precio entrada)", group=grp_s, minval=0.0, step=100.0)
+s3_tp   = input.float(0.0, "TP S3 (precio)",             group=grp_s, minval=0.0, step=100.0)
+s3_sl   = input.float(0.0, "SL S3 (precio)",             group=grp_s, minval=0.0, step=100.0)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// VOLUMEN
+// ═══════════════════════════════════════════════════════════════════════════
+grp_vol    = "Volumen"
+vol_ma_len = input.int(20, "SMA Volumen (barras)", minval=1, group=grp_vol)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CÁLCULOS DE VELA
+// ═══════════════════════════════════════════════════════════════════════════
+candle_range   = high - low
+is_sun         = dayofweek == dayofweek.sunday
+can_trade      = not skip_sun or not is_sun
+
+upper_wick     = high - math.max(open, close)
+lower_wick     = math.min(open, close) - low
+upper_wick_pct = candle_range > 0 ? upper_wick / candle_range * 100 : 0.0
+lower_wick_pct = candle_range > 0 ? lower_wick / candle_range * 100 : 0.0
+
+vol_ma    = ta.sma(volume, vol_ma_len)
+vol_ratio = vol_ma > 0 ? volume / vol_ma : 1.0
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FUNCIONES DE DETECCIÓN
+// SHORT: mecha superior toca o entra al nivel, cierre DEBAJO del nivel
+// LONG:  mecha inferior toca o entra al nivel, cierre ENCIMA  del nivel
+// ═══════════════════════════════════════════════════════════════════════════
+short_touch(level) =>
+    level > 0 and high >= level and close < level and candle_range > 0 and upper_wick_pct >= min_wick
+
+long_touch(level) =>
+    level > 0 and low <= level and close > level and candle_range > 0 and lower_wick_pct >= min_wick
+
+// Calcula % para el JSON a partir del precio de entrada y los precios de TP/SL
+// SHORT: TP está debajo de entry, SL está encima
+short_tp_pct(entry, tp_pr) => entry > 0 and tp_pr > 0 ? (entry - tp_pr) / entry * 100 : 0.0
+short_sl_pct(entry, sl_pr) => entry > 0 and sl_pr > 0 ? (sl_pr - entry) / entry * 100 : 0.0
+// LONG:  TP está encima de entry, SL está debajo
+long_tp_pct(entry, tp_pr)  => entry > 0 and tp_pr > 0 ? (tp_pr - entry) / entry * 100 : 0.0
+long_sl_pct(entry, sl_pr)  => entry > 0 and sl_pr > 0 ? (entry - sl_pr) / entry * 100 : 0.0
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ESTADO DEL TRADE (1 trade a la vez)
+// ═══════════════════════════════════════════════════════════════════════════
+var float entry_price  = na
+var float tp_price     = na
+var float sl_price     = na
+var bool  trade_open   = false
+var bool  is_long_pos  = false
+var int   entry_bar    = -1
+var string trd_result  = "Sin trade"
+
+// Flags de señal — true solo en la vela de apertura
+var bool sig_r1 = false
+var bool sig_r2 = false
+var bool sig_r3 = false
+var bool sig_s1 = false
+var bool sig_s2 = false
+var bool sig_s3 = false
+
+sig_r1 := false
+sig_r2 := false
+sig_r3 := false
+sig_s1 := false
+sig_s2 := false
+sig_s3 := false
+
+// ─── Evaluar TP/SL (desde la vela siguiente a la entrada) ────────────────
+tp_hit = trade_open and bar_index != entry_bar and (is_long_pos ? high >= tp_price : low  <= tp_price)
+sl_hit = trade_open and bar_index != entry_bar and not tp_hit and (is_long_pos ? low <= sl_price : high >= sl_price)
+
+if tp_hit
+    trade_open  := false
+    trd_result  := "TP ✅"
+    entry_price := na
+    tp_price    := na
+    sl_price    := na
+
+else if sl_hit
+    trade_open  := false
+    trd_result  := "SL ❌"
+    entry_price := na
+    tp_price    := na
+    sl_price    := na
+
+// ─── Abrir trade — prioridad R1 > R2 > R3 > S1 > S2 > S3 ────────────────
+if not trade_open and can_trade
+    if short_touch(r1) and r1_tp > 0 and r1_sl > 0
+        is_long_pos  := false
+        entry_price  := close
+        tp_price     := r1_tp
+        sl_price     := r1_sl
+        eff_tp_pct   := math.max(short_tp_pct(close, r1_tp) - fee_tp_pct, 0) * leverage
+        eff_sl_pct   := (short_sl_pct(close, r1_sl) + fee_sl_pct) * leverage
+        trade_open   := true
+        entry_bar    := bar_index
+        trd_result   := "SHORT R1"
+        sig_r1       := true
+    else if short_touch(r2) and r2_tp > 0 and r2_sl > 0
+        is_long_pos  := false
+        entry_price  := close
+        tp_price     := r2_tp
+        sl_price     := r2_sl
+        eff_tp_pct   := math.max(short_tp_pct(close, r2_tp) - fee_tp_pct, 0) * leverage
+        eff_sl_pct   := (short_sl_pct(close, r2_sl) + fee_sl_pct) * leverage
+        trade_open   := true
+        entry_bar    := bar_index
+        trd_result   := "SHORT R2"
+        sig_r2       := true
+    else if short_touch(r3) and r3_tp > 0 and r3_sl > 0
+        is_long_pos  := false
+        entry_price  := close
+        tp_price     := r3_tp
+        sl_price     := r3_sl
+        eff_tp_pct   := math.max(short_tp_pct(close, r3_tp) - fee_tp_pct, 0) * leverage
+        eff_sl_pct   := (short_sl_pct(close, r3_sl) + fee_sl_pct) * leverage
+        trade_open   := true
+        entry_bar    := bar_index
+        trd_result   := "SHORT R3"
+        sig_r3       := true
+    else if long_touch(s1) and s1_tp > 0 and s1_sl > 0
+        is_long_pos  := true
+        entry_price  := close
+        tp_price     := s1_tp
+        sl_price     := s1_sl
+        eff_tp_pct   := math.max(long_tp_pct(close, s1_tp) - fee_tp_pct, 0) * leverage
+        eff_sl_pct   := (long_sl_pct(close, s1_sl) + fee_sl_pct) * leverage
+        trade_open   := true
+        entry_bar    := bar_index
+        trd_result   := "LONG S1"
+        sig_s1       := true
+    else if long_touch(s2) and s2_tp > 0 and s2_sl > 0
+        is_long_pos  := true
+        entry_price  := close
+        tp_price     := s2_tp
+        sl_price     := s2_sl
+        eff_tp_pct   := math.max(long_tp_pct(close, s2_tp) - fee_tp_pct, 0) * leverage
+        eff_sl_pct   := (long_sl_pct(close, s2_sl) + fee_sl_pct) * leverage
+        trade_open   := true
+        entry_bar    := bar_index
+        trd_result   := "LONG S2"
+        sig_s2       := true
+    else if long_touch(s3) and s3_tp > 0 and s3_sl > 0
+        is_long_pos  := true
+        entry_price  := close
+        tp_price     := s3_tp
+        sl_price     := s3_sl
+        eff_tp_pct   := math.max(long_tp_pct(close, s3_tp) - fee_tp_pct, 0) * leverage
+        eff_sl_pct   := (long_sl_pct(close, s3_sl) + fee_sl_pct) * leverage
+        trade_open   := true
+        entry_bar    := bar_index
+        trd_result   := "LONG S3"
+        sig_s3       := true
+
+any_signal = sig_r1 or sig_r2 or sig_r3 or sig_s1 or sig_s2 or sig_s3
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ESTADÍSTICAS (capital compuesto y simple)
+// ═══════════════════════════════════════════════════════════════════════════
+var int   tot_tp  = 0
+var int   tot_sl  = 0
+var int   tot_cl  = 0
+var float prof    = 0.0
+var float loss    = 0.0
+var float net     = 0.0
+var float eq      = 0.0
+var float eq_pk   = 0.0
+var float max_dd  = 0.0
+var float cmp_cap = na
+var float smp_cap = na
+
+if barstate.isfirst
+    cmp_cap := cap0
+    smp_cap := cap0
+
+if tp_hit
+    tot_tp  += 1
+    tot_cl  += 1
+    prof    += eff_tp_pct
+    net     := prof - loss
+    eq      += eff_tp_pct
+    eq_pk   := math.max(eq_pk, eq)
+    max_dd  := math.max(max_dd, eq_pk - eq)
+    smp_cap := cap0 * (1 + net / 100)
+    cmp_cap := cmp_cap * (1 + eff_tp_pct / 100)
+
+else if sl_hit
+    tot_sl  += 1
+    tot_cl  += 1
+    loss    += eff_sl_pct
+    net     := prof - loss
+    eq      -= eff_sl_pct
+    eq_pk   := math.max(eq_pk, eq)
+    max_dd  := math.max(max_dd, eq_pk - eq)
+    smp_cap := cap0 * (1 + net / 100)
+    cmp_cap := cmp_cap * (1 - eff_sl_pct / 100)
+
+win_rate = tot_cl > 0 ? tot_tp / tot_cl * 100 : 0.0
+
+// ═══════════════════════════════════════════════════════════════════════════
+// VISUALES
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Líneas de nivel de entrada
+plot(show_lvl and r1 > 0 ? r1 : na, "R1", color=color.new(color.red,   20), linewidth=1, style=plot.style_linebr)
+plot(show_lvl and r2 > 0 ? r2 : na, "R2", color=color.new(color.red,   45), linewidth=1, style=plot.style_linebr)
+plot(show_lvl and r3 > 0 ? r3 : na, "R3", color=color.new(color.red,   65), linewidth=1, style=plot.style_linebr)
+plot(show_lvl and s1 > 0 ? s1 : na, "S1", color=color.new(color.green, 20), linewidth=1, style=plot.style_linebr)
+plot(show_lvl and s2 > 0 ? s2 : na, "S2", color=color.new(color.green, 45), linewidth=1, style=plot.style_linebr)
+plot(show_lvl and s3 > 0 ? s3 : na, "S3", color=color.new(color.green, 65), linewidth=1, style=plot.style_linebr)
+
+// Líneas TP/SL configurados (punteadas para referencia visual)
+plot(show_lvl and r1_tp > 0 ? r1_tp : na, "TP R1", color=color.new(color.lime, 50), linewidth=1, style=plot.style_circles)
+plot(show_lvl and r1_sl > 0 ? r1_sl : na, "SL R1", color=color.new(color.orange, 50), linewidth=1, style=plot.style_circles)
+plot(show_lvl and s1_tp > 0 ? s1_tp : na, "TP S1", color=color.new(color.lime, 50), linewidth=1, style=plot.style_circles)
+plot(show_lvl and s1_sl > 0 ? s1_sl : na, "SL S1", color=color.new(color.orange, 50), linewidth=1, style=plot.style_circles)
+
+// Líneas de trade activo
+plot(show_trd and not na(entry_price) ? entry_price : na, "Entrada",     color=color.yellow, linewidth=2, style=plot.style_linebr)
+plot(show_trd and not na(tp_price)    ? tp_price    : na, "Take Profit", color=color.lime,   linewidth=2, style=plot.style_linebr)
+plot(show_trd and not na(sl_price)    ? sl_price    : na, "Stop Loss",   color=color.red,    linewidth=2, style=plot.style_linebr)
+
+// Marcas de señal
+if show_sig and any_signal
+    _lbl = sig_r1 ? "R1" : sig_r2 ? "R2" : sig_r3 ? "R3" : sig_s1 ? "S1" : sig_s2 ? "S2" : "S3"
+    _col = is_long_pos ? color.new(color.green, 0) : color.new(color.red, 0)
+    if is_long_pos
+        label.new(bar_index, low,  _lbl, style=label.style_label_up,   color=_col, textcolor=color.white, size=size.small)
+    else
+        label.new(bar_index, high, _lbl, style=label.style_label_down, color=_col, textcolor=color.white, size=size.small)
+
+plotshape(tp_hit, "TP", style=shape.labelup,   location=location.belowbar, color=color.lime, textcolor=color.black, size=size.tiny, text="TP")
+plotshape(sl_hit, "SL", style=shape.labeldown, location=location.abovebar, color=color.red,  textcolor=color.white, size=size.tiny, text="SL")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TABLAS
+// ═══════════════════════════════════════════════════════════════════════════
+var table info_panel  = table.new(position.bottom_right, 2, 9,  bgcolor=color.new(color.black, 60))
+var table stats_panel = table.new(position.top_center,   2, 9,  bgcolor=color.new(color.black, 60))
+
+if barstate.islast
+    side_txt = is_long_pos ? "LONG 🟢" : "SHORT 🔴"
+    side_col = is_long_pos ? color.green : color.red
+    net_col  = net >= 0 ? color.green : color.red
+    dd_col   = max_dd > 0 ? color.orange : color.gray
+
+    // Calcular % TP/SL del trade activo para mostrar en tabla
+    _tp_pct_show = trade_open and not na(entry_price) and not na(tp_price) and entry_price > 0 ?
+         (is_long_pos ? (tp_price - entry_price) / entry_price * 100 : (entry_price - tp_price) / entry_price * 100) : 0.0
+    _sl_pct_show = trade_open and not na(entry_price) and not na(sl_price) and entry_price > 0 ?
+         (is_long_pos ? (entry_price - sl_price) / entry_price * 100 : (sl_price - entry_price) / entry_price * 100) : 0.0
+
+    table.cell(info_panel, 0, 0, "Estado trade",    text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 0, trade_open ? side_txt : "Sin trade", text_color=color.white, bgcolor=trade_open ? side_col : color.gray, text_size=size.small)
+
+    table.cell(info_panel, 0, 1, "Último resultado", text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 1, trd_result,          text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 2, "Entrada",           text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 2, na(entry_price) ? "-" : str.tostring(entry_price, "#.##"), text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 3, "TP precio",         text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 3, na(tp_price) ? "-" : str.tostring(tp_price, "#.##") + "  (" + str.tostring(_tp_pct_show, "#.##") + "%)", text_color=color.lime, text_size=size.small)
+
+    table.cell(info_panel, 0, 4, "SL precio",         text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 4, na(sl_price) ? "-" : str.tostring(sl_price, "#.##") + "  (" + str.tostring(_sl_pct_show, "#.##") + "%)", text_color=color.orange, text_size=size.small)
+
+    table.cell(info_panel, 0, 5, "Mecha superior",   text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 5, str.tostring(upper_wick_pct, "#.##") + "%", text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 6, "Mecha inferior",   text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 6, str.tostring(lower_wick_pct, "#.##") + "%", text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 7, "Domingos",         text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 7, skip_sun ? "Omitidos" : "Activos", text_color=color.white, text_size=size.small)
+
+    table.cell(info_panel, 0, 8, "Account",          text_color=color.white, text_size=size.small)
+    table.cell(info_panel, 1, 8, wh_acct,             text_color=color.white, text_size=size.small)
+
+    table.cell(stats_panel, 0, 0, "TP cerrados",       text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 0, str.tostring(tot_tp), text_color=color.white, bgcolor=color.new(color.green, 60), text_size=size.small)
+
+    table.cell(stats_panel, 0, 1, "SL cerrados",       text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 1, str.tostring(tot_sl), text_color=color.white, bgcolor=color.new(color.red, 60), text_size=size.small)
+
+    table.cell(stats_panel, 0, 2, "Trades cerrados",   text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 2, str.tostring(tot_cl), text_color=color.white, text_size=size.small)
+
+    table.cell(stats_panel, 0, 3, "Win Rate",          text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 3, str.tostring(win_rate, "#.##") + "%", text_color=color.white, text_size=size.small)
+
+    table.cell(stats_panel, 0, 4, "Neto x" + str.tostring(leverage, "#"), text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 4, str.tostring(net, "#.##") + "%", text_color=color.white, bgcolor=net_col, text_size=size.small)
+
+    table.cell(stats_panel, 0, 5, "Máx. caída",        text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 5, str.tostring(max_dd, "#.##") + "%", text_color=color.white, bgcolor=dd_col, text_size=size.small)
+
+    table.cell(stats_panel, 0, 6, "Capital simple",    text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 6, "$" + str.tostring(smp_cap, "#.##"), text_color=color.white, bgcolor=color.new(color.gray, 70), text_size=size.small)
+
+    table.cell(stats_panel, 0, 7, "Capital compuesto", text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 7, "$" + str.tostring(cmp_cap, "#.##"), text_color=color.white, bgcolor=color.new(color.blue, 75), text_size=size.small)
+
+    table.cell(stats_panel, 0, 8, "Mejor método",      text_color=color.white, text_size=size.small)
+    table.cell(stats_panel, 1, 8, cmp_cap > smp_cap ? "Compuesto" : smp_cap > cmp_cap ? "Simple" : "Iguales", text_color=color.white, text_size=size.small)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ALERTAS
+// ═══════════════════════════════════════════════════════════════════════════
+alertcondition(any_signal, "Señal Niveles S/R",  "Rechazo detectado en nivel manual")
+alertcondition(sig_r1,     "Señal SHORT R1",     "Rechazo SHORT en Resistencia 1")
+alertcondition(sig_r2,     "Señal SHORT R2",     "Rechazo SHORT en Resistencia 2")
+alertcondition(sig_r3,     "Señal SHORT R3",     "Rechazo SHORT en Resistencia 3")
+alertcondition(sig_s1,     "Señal LONG  S1",     "Rechazo LONG en Soporte 1")
+alertcondition(sig_s2,     "Señal LONG  S2",     "Rechazo LONG en Soporte 2")
+alertcondition(sig_s3,     "Señal LONG  S3",     "Rechazo LONG en Soporte 3")
+alertcondition(tp_hit,     "TP alcanzado",        "Trade cerrado en Take Profit")
+alertcondition(sl_hit,     "SL alcanzado",        "Trade cerrado en Stop Loss")
+
+// El JSON envía los % calculados dinámicamente desde el close de entrada
+if any_signal
+    _entry = close
+    _tp_pr = sig_r1 ? r1_tp : sig_r2 ? r2_tp : sig_r3 ? r3_tp : sig_s1 ? s1_tp : sig_s2 ? s2_tp : s3_tp
+    _sl_pr = sig_r1 ? r1_sl : sig_r2 ? r2_sl : sig_r3 ? r3_sl : sig_s1 ? s1_sl : sig_s2 ? s2_sl : s3_sl
+    _tipo  = is_long_pos ? "S" : "R"
+    _tp_pct = is_long_pos ? long_tp_pct(_entry, _tp_pr) : short_tp_pct(_entry, _tp_pr)
+    _sl_pct = is_long_pos ? long_sl_pct(_entry, _sl_pr) : short_sl_pct(_entry, _sl_pr)
+    alert('{"secret":"TestAndres","account":"' + wh_acct + '","tipo":"' + _tipo + '","tp":' + str.tostring(_tp_pct, "#.####") + ',"sl":' + str.tostring(_sl_pct, "#.####") + '}', alert.freq_once_per_bar_close)

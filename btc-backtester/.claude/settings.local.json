@@ -4,7 +4,13 @@
       "Bash(jobs -l)",
       "Bash(curl -s http://localhost:3001/api/status)",
       "Bash(cmd /c \"echo %COMPUTERNAME%\")",
-      "Bash(cmd /c \"whoami /all 2>&1 | head -5\")"
+      "Bash(cmd /c \"whoami /all 2>&1 | head -5\")",
+      "Bash(node --check server/index.js)",
+      "Bash(node --check server/signalService.js)",
+      "Bash(node --check \"c:\\\\Users\\\\andre\\\\Downloads\\\\btc-backtester\\\\RepoAndres\\\\btc-backtester\\\\server\\\\signalService.js\")",
+      "Bash(node --check \"c:\\\\Users\\\\andre\\\\Downloads\\\\btc-backtester\\\\RepoAndres\\\\btc-backtester\\\\server\\\\index.js\")",
+      "Bash(ls \"C:\\\\Users\\\\andre\\\\OneDrive\\\\Escritorio\\\\Navisafsolution\\\\DispatchOrders\\\\FirstLambdaTrading\")",
+      "Read(//c/Users/andre/OneDrive/Escritorio/Navisafsolution/DispatchOrders/FirstLambdaTrading/**)"
     ]
   }
 }
