@@ -1,0 +1,20 @@
+# Dependencias y build
+node_modules/
+dist/
+
+# Variables de entorno (deja solo el .example)
+.env
+.env.*
+!.env.example
+
+# Logs y datos locales
+*.log
+npm-debug.log*
+btc-backtester/server/signals_log.json
+btc-backtester/server/operations.json
+
+# Sistema / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
